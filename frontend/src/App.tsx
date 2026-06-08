@@ -22,8 +22,11 @@ export default function App() {
         const py = await window.loadPyodide({
           indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/",
         });
-        setPaso("Cargando pandas y openpyxl…");
-        await py.loadPackage(["pandas", "openpyxl"]);
+        setPaso("Cargando pandas…");
+        await py.loadPackage(["pandas", "micropip"]);
+        setPaso("Instalando openpyxl…");
+        const micropip = py.pyimport("micropip");
+        await micropip.install("openpyxl");
         setPaso("Cargando motor de cabida…");
         const code = await (await fetch("/cabida_core.py")).text();
         py.runPython(code);
