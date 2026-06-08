@@ -1,9 +1,19 @@
-﻿__pycache__/
+﻿# Python
+__pycache__/
 *.pyc
 .venv/
 venv/
 .env
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Datos
 *.xlsx
 *.csv
+
+# OS / editor
 .DS_Store
 .vscode/
