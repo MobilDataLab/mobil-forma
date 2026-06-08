@@ -44,3 +44,26 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .msg.err { background: #FDE8E8; color: #842029; }
 .msg.ok { background: #E2F0DA; color: #375623; }
 .foot { margin-top: 24px; text-align: center; font-size: 12px; color: #91a0b3; }
+
+/* Pyodide boot */
+.boot {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: #5b6b80; margin-bottom: 18px;
+  background: #F2F8FE; border: 1px solid var(--mobil-borde);
+  border-radius: 8px; padding: 10px 12px;
+}
+.spin {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--mobil-borde); border-top-color: var(--mobil-azul-claro);
+  animation: sp .8s linear infinite; flex: none;
+}
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 22px; }
+.kpi {
+  background: var(--mobil-bg); border: 1px solid var(--mobil-borde);
+  border-radius: 8px; padding: 12px 8px; text-align: center;
+  font-size: 11px; color: #5b6b80;
+}
+.kpi span { display: block; font-size: 17px; font-weight: 700; color: var(--mobil-azul); margin-bottom: 2px; }

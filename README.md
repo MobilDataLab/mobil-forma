@@ -2,39 +2,41 @@
 
 Aplicación de análisis de cabida para Autodesk Forma — Mobil Arquitectos.
 A partir de un CSV exportado de Forma y un número de subdivisiones, genera un
-Excel `Cabida_N.xlsx` con formato institucional (colores canónicos por función,
-subtotales y totales).
+Excel con formato institucional (Datos, Cabida, Programa y Tipologías).
 
-## Arquitectura
+**100% frontend (sin backend).** El motor Python corre en el navegador con
+Pyodide (WebAssembly). El CSV nunca se sube a ningún servidor.
+
+## Estructura
 
 ```
 mobil-forma/
-├── backend/          API FastAPI que envuelve el motor validado
-│   ├── engine/       genera_cabida.py (motor v1.8, sin cambios)
-│   ├── main.py       endpoints /health y /cabida
-│   └── requirements.txt
-└── frontend/         React + Vite (UI con branding Mobil)
-    └── src/App.tsx   carga CSV + n_sub → descarga Excel
+└── frontend/                 React + Vite + TypeScript
+    ├── public/
+    │   └── cabida_core.py     motor de cabida (Python, in-memory)
+    └── src/
+        ├── App.tsx            UI: carga CSV + n_sub → KPIs → descarga Excel
+        └── index.css          branding Mobil
 ```
 
-## Quickstart
+## Desarrollo
 
-Backend:
 ```bash
-cd backend && pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+cd frontend
+npm install
+npm run dev
 ```
 
-Frontend:
-```bash
-cd frontend && npm install && npm run dev
-```
+## Deploy (Vercel, sitio estático)
 
-## Deploy
+- Importar el repo en Vercel.
+- **Root Directory:** `frontend`
+- Framework: Vite · Build: `npm run build` · Output: `dist`
+- Sin variables de entorno.
 
-- Frontend → Vercel (`npm run build`, output `dist`, var `VITE_API_URL`).
-- Backend → Render / Railway (`uvicorn main:app --host 0.0.0.0 --port $PORT`).
+## Motor
 
-## Estado
-
-Skill `mobil-forma` v1.8 en transición a aplicación web.
+`frontend/public/cabida_core.py` es la lógica de la skill v1.8 adaptada a memoria
+(`generar_cabida(csv_text, n_sub)` → xlsx en base64). Mejora sobre v1.8: soporta
+el header `Fonction` (export de Forma en francés) además de `Función`/`Function`.
+Validado con un CSV real de 631 elementos (4 hojas, totales correctos).
