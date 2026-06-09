@@ -8,9 +8,22 @@ import TablaElementos, {
 import PaletaColores, { type ColorCanonico } from "./PaletaColores";
 import GraficoVenta, { type Venta } from "./GraficoVenta";
 import Estacionamientos, { type GfaEstac } from "./Estacionamientos";
+import { IconoArchivo, IconoSubir } from "./iconos";
+import { MobilMark } from "./MobilMark";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
+
+// Secciones (vista por páginas). El orden define el de las pestañas.
+const VISTAS = [
+  { id: "resumen", label: "Resumen" },
+  { id: "cabida", label: "Cabida por piso" },
+  { id: "venta", label: "Venta" },
+  { id: "elementos", label: "Elementos" },
+  { id: "estac", label: "Estacionamientos" },
+  { id: "paleta", label: "Paleta" },
+] as const;
+type Vista = (typeof VISTAS)[number]["id"];
 
 export default function App() {
   const [estado, setEstado] = useState<Estado>("cargando");
@@ -27,6 +40,11 @@ export default function App() {
   const [paleta, setPaleta] = useState<ColorCanonico[] | null>(null);
   const [ediciones, setEdiciones] = useState<Ediciones>(edicionesVacias());
   const [msg, setMsg] = useState<{ t: "err" | "ok"; x: string } | null>(null);
+  // Sección activa (se recuerda entre recargas).
+  const [vista, setVista] = useState<Vista>(() => {
+    const v = localStorage.getItem("mobil-vista");
+    return VISTAS.some((x) => x.id === v) ? (v as Vista) : "resumen";
+  });
   const pyRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -141,91 +159,151 @@ json.dumps({
 
   const fmt = (n: number) => n.toLocaleString("es-CL");
 
-  return (
-    <div className="wrap">
-      <div className="brand">
-        <span className="dot" />
-        <h1>MOBIL · CABIDA</h1>
-      </div>
-      <p className="sub">Análisis de cabida desde Autodesk Forma → Excel formateado. Todo corre en tu navegador; el CSV no se sube a ningún servidor.</p>
+  // Persistir la pestaña elegida.
+  useEffect(() => { localStorage.setItem("mobil-vista", vista); }, [vista]);
 
-      <div className="card">
-        {estado !== "listo" && estado !== "error" && (
-          <div className="boot"><span className="spin" /> {paso}</div>
+  // Qué secciones tienen datos para mostrarse (las demás quedan deshabilitadas).
+  const dispo: Record<Vista, boolean> = {
+    resumen: true,
+    cabida: !!matriz,
+    venta: !!venta,
+    elementos: !!tabla,
+    estac: !!estac,
+    paleta: !!paleta,
+  };
+  // Si la pestaña recordada aún no tiene datos, caemos a «Resumen».
+  const vistaActiva: Vista = dispo[vista] ? vista : "resumen";
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            <span className="brand-mark"><MobilMark size={20} /></span>
+            <div className="brand-text">
+              <h1>MOBIL · CABIDA</h1>
+              <span className="brand-tag">Análisis de cabida · Autodesk Forma → Excel</span>
+            </div>
+          </div>
+          <span className="topbar-meta">100% en tu navegador · el CSV no se sube</span>
+        </div>
+        <nav className="tabnav"><div className="tabnav-inner">
+          {VISTAS.map((v) => (
+            <button
+              key={v.id}
+              className={"tab" + (vistaActiva === v.id ? " on" : "")}
+              onClick={() => setVista(v.id)}
+              disabled={!dispo[v.id]}
+              title={dispo[v.id] ? undefined : "Carga un CSV para ver esta sección"}
+            >
+              {v.label}
+              {v.id === "elementos" && tabla && <span className="tab-badge">{tabla.filas.length}</span>}
+            </button>
+          ))}
+        </div></nav>
+      </header>
+
+      <main className="shell">
+        {vistaActiva === "resumen" && (
+          <>
+            <section className="panel panel-control">
+              {estado !== "listo" && estado !== "error" && (
+                <div className="boot"><span className="spin" /> {paso}</div>
+              )}
+
+              <div className="control-grid">
+                <div className="field">
+                  <label>Archivo CSV (export de Forma)</label>
+                  <div
+                    className={"dropzone" + (file ? " has" : "")}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => inputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current?.click(); }
+                    }}
+                  >
+                    <span className="dz-icon">{file ? <IconoArchivo /> : <IconoSubir />}</span>
+                    <span className="dz-text">
+                      <span className="dz-main">{file ? file.name : "Selecciona un archivo .csv"}</span>
+                      <span className="dz-sub">{file ? "Click para reemplazar" : "Exportado desde Autodesk Forma"}</span>
+                    </span>
+                  </div>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".csv"
+                    hidden
+                    onChange={(e) => { cargarArchivo(e.target.files?.[0] ?? null); }}
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="nsub">Subterráneos</label>
+                  <input
+                    id="nsub"
+                    type="number"
+                    min={1}
+                    value={nSub}
+                    onChange={(e) => setNSub(Math.max(1, Number(e.target.value)))}
+                  />
+                </div>
+
+                <div className="field field-cta">
+                  <button className="btn-primary" onClick={generar} disabled={working || estado !== "listo"}>
+                    {working ? "Generando…" : estado === "listo" ? "Generar cabida" : "Cargando motor…"}
+                  </button>
+                </div>
+              </div>
+
+              {msg && <div className={"msg " + msg.t} style={{ marginTop: 16 }}>{msg.x}</div>}
+            </section>
+
+            {resumen && (
+              <section className="kpi-band">
+                <div className="kpi"><span>{fmt(resumen.elementos)}</span>Elementos</div>
+                <div className="kpi"><span>{fmt(resumen.construido)}</span>Construido m²</div>
+                <div className="kpi"><span>{fmt(resumen.venta)}</span>Venta m²</div>
+                <div className="kpi"><span>{(resumen.eficiencia * 100).toFixed(1)}%</span>Eficiencia</div>
+              </section>
+            )}
+          </>
         )}
 
-        <label>Archivo CSV (export de Forma)</label>
-        <div
-          className={"drop" + (file ? " has" : "")}
-          onClick={() => inputRef.current?.click()}
-        >
-          {file ? file.name : "Click para seleccionar un .csv"}
-        </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv"
-          hidden
-          onChange={(e) => { cargarArchivo(e.target.files?.[0] ?? null); }}
-        />
-
-        <div className="field">
-          <label>Subterráneo</label>
-          <input
-            type="number"
-            min={1}
-            value={nSub}
-            onChange={(e) => setNSub(Math.max(1, Number(e.target.value)))}
-          />
-        </div>
-
-        <button onClick={generar} disabled={working || estado !== "listo"}>
-          {working ? "Generando…" : estado === "listo" ? "Generar cabida" : "Cargando motor…"}
-        </button>
-
-        {resumen && (
-          <div className="kpis">
-            <div className="kpi"><span>{fmt(resumen.elementos)}</span>Elementos</div>
-            <div className="kpi"><span>{fmt(resumen.construido)}</span>Construido m²</div>
-            <div className="kpi"><span>{fmt(resumen.venta)}</span>Venta m²</div>
-            <div className="kpi"><span>{(resumen.eficiencia * 100).toFixed(1)}%</span>Eficiencia</div>
+        {vistaActiva === "cabida" && matriz && (
+          <div className="grid">
+            <section className="panel col-12"><GraficoCabida matriz={matriz} /></section>
           </div>
         )}
 
-        {msg && <div className={"msg " + msg.t}>{msg.x}</div>}
-      </div>
+        {vistaActiva === "venta" && venta && (
+          <div className="grid">
+            <section className="panel col-12"><GraficoVenta venta={venta} /></section>
+          </div>
+        )}
 
-      {tabla && (
-        <div className="card">
-          <TablaElementos tabla={tabla} matriz={matriz} ediciones={ediciones} setEdiciones={setEdiciones} nSub={nSub} />
-        </div>
-      )}
+        {vistaActiva === "elementos" && tabla && (
+          <div className="grid">
+            <section className="panel col-12">
+              <TablaElementos tabla={tabla} matriz={matriz} ediciones={ediciones} setEdiciones={setEdiciones} nSub={nSub} />
+            </section>
+          </div>
+        )}
 
-      {matriz && (
-        <div className="card">
-          <GraficoCabida matriz={matriz} />
-        </div>
-      )}
+        {vistaActiva === "estac" && estac && (
+          <div className="grid">
+            <section className="panel col-12"><Estacionamientos estac={estac} /></section>
+          </div>
+        )}
 
-      {venta && (
-        <div className="card">
-          <GraficoVenta venta={venta} />
-        </div>
-      )}
+        {vistaActiva === "paleta" && paleta && (
+          <div className="grid">
+            <section className="panel col-12 panel-paleta"><PaletaColores paleta={paleta} /></section>
+          </div>
+        )}
+      </main>
 
-      {estac && (
-        <div className="card">
-          <Estacionamientos estac={estac} />
-        </div>
-      )}
-
-      {paleta && (
-        <div className="card">
-          <PaletaColores paleta={paleta} />
-        </div>
-      )}
-
-      <p className="foot">mobil-forma v1.8 · MobilDataLab · Pyodide</p>
+      <footer className="foot">mobil-forma v1.8 · MobilDataLab · Pyodide</footer>
     </div>
   );
 }

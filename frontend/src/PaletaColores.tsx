@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { exportarCsv } from "./exportar";
+import { IconoDescarga } from "./iconos";
 
 export type ColorCanonico = {
   funcion: string;
@@ -21,13 +23,25 @@ export default function PaletaColores({ paleta }: { paleta: ColorCanonico[] }) {
   const copiarTodo = () =>
     copiar(paleta.map((p) => `${p.funcion}\t${p.rgb_str}`).join("\n"), "__all__");
 
+  const exportarTabla = () =>
+    exportarCsv(
+      "paleta-canonica",
+      ["Función canónica", "HEX", "RGB"],
+      paleta.map((p) => [p.funcion, p.hex, p.rgb_str])
+    );
+
   return (
     <div className="paleta">
       <div className="tabla-head">
-        <div className="grafico-titulo">Paleta de funciones canónicas</div>
-        <button className="btn-link" onClick={copiarTodo}>
-          {copiado === "__all__" ? "¡Copiado!" : "Copiar tabla"}
-        </button>
+        <div className="grafico-titulo">Paleta de <span className="acento">funciones canónicas</span></div>
+        <div className="tabla-tools">
+          <button className="btn-link" onClick={copiarTodo}>
+            {copiado === "__all__" ? "¡Copiado!" : "Copiar tabla"}
+          </button>
+          <button className="btn-export" onClick={exportarTabla} title="Descargar la paleta como CSV">
+            <IconoDescarga /> CSV
+          </button>
+        </div>
       </div>
 
       <table className="tbl tbl-paleta">
@@ -41,7 +55,7 @@ export default function PaletaColores({ paleta }: { paleta: ColorCanonico[] }) {
         <tbody>
           {paleta.map((p) => (
             <tr key={p.funcion}>
-              <td>{p.funcion}</td>
+              <td className="col-fn">{p.funcion}</td>
               <td className="col-muestra">
                 <span className="swatch" style={{ background: p.hex }} />
               </td>

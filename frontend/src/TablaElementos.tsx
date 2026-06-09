@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ordenarPisos, rankPiso, nivelDeEtiqueta } from "./pisos";
 import { type Matriz } from "./GraficoCabida";
+import { exportarCsv } from "./exportar";
+import { IconoDescarga } from "./iconos";
 
 export type FilaElemento = {
   id: string;
@@ -132,10 +134,26 @@ export default function TablaElementos({
     ediciones.excluir.length ||
     ediciones.agregar.length;
 
+  // Exporta las filas visibles (con las ediciones aplicadas) a CSV.
+  const exportarTabla = () => {
+    exportarCsv(
+      "elementos-cabida",
+      ["Incluido", "Función original", "Función canónica", "m²", "Nivel", "Piso"],
+      filas.map((f) => [
+        excluidos.has(f.id) ? "No" : "Sí",
+        f.function,
+        f.canonica,
+        ediciones.gfa[f.id] ?? f.gfa,
+        (ediciones.nivel[f.id] ?? f.nivel ?? "") as string | number,
+        f.etiqueta,
+      ])
+    );
+  };
+
   return (
     <div className="tabla-el">
       <div className="tabla-head">
-        <div className="grafico-titulo">Elementos · corrige áreas y funciones</div>
+        <div className="grafico-titulo">Elementos · <span className="acento">corrige áreas y funciones</span></div>
         <div className="tabla-tools">
           {tabla.n_otro > 0 && (
             <label className="chk-otro">
@@ -174,6 +192,9 @@ export default function TablaElementos({
               Restablecer
             </button>
           )}
+          <button className="btn-export" onClick={exportarTabla} title="Descargar la tabla como CSV">
+            <IconoDescarga /> CSV
+          </button>
         </div>
       </div>
 

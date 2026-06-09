@@ -15,7 +15,7 @@ export default function Estacionamientos({ estac }: { estac: GfaEstac }) {
 
   return (
     <div className="estac">
-      <div className="grafico-titulo">Estacionamientos · ratio por cajón</div>
+      <div className="grafico-titulo">Estacionamientos · <span className="acento">ratio por cajón</span></div>
 
       <div className="estac-top">
         <div className="estac-area">
@@ -51,7 +51,7 @@ export default function Estacionamientos({ estac }: { estac: GfaEstac }) {
             cajones / 1.000 m²
           </div>
           <div className={"kpi " + holguraClase(m2PorCajon)}>
-            <span>{holguraTxt(m2PorCajon)}</span>
+            <span className="holgura"><span className="punto" />{holguraTxt(m2PorCajon)}</span>
             Holgura (ref. 25–35 m²/cajón)
           </div>
         </div>
@@ -64,9 +64,9 @@ export default function Estacionamientos({ estac }: { estac: GfaEstac }) {
 
 // Referencia habitual: ~25–35 m²/cajón incluyendo circulación.
 function holguraTxt(m2: number): string {
-  if (m2 >= 30) return "🟢 Amplia";
-  if (m2 >= 25) return "🟡 Justa";
-  return "🔴 Ajustada";
+  if (m2 >= 30) return "Amplia";
+  if (m2 >= 25) return "Justa";
+  return "Ajustada";
 }
 function holguraClase(m2: number): string {
   if (m2 >= 30) return "kpi-ok";
