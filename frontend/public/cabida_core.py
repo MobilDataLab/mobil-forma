@@ -394,6 +394,14 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
 
     wb = Workbook()
 
+    # Forzar cálculo automático + recálculo completo al abrir.
+    # El libro guarda solo fórmulas (openpyxl no evalúa), así que depende de que
+    # Excel recalcule al abrirlo. Si el Excel del usuario está en modo Manual
+    # (típico tras un cierre forzado / recuperación de documentos), las celdas con
+    # fórmula se ven en blanco. Fijar 'auto' aquí lo evita en cualquier equipo.
+    wb.calculation.calcMode = 'auto'
+    wb.calculation.fullCalcOnLoad = True
+
     # ═══════════════════════════════════════════════════════
     # HOJA 1 — DATOS
     # ═══════════════════════════════════════════════════════
