@@ -1,4 +1,10 @@
 ﻿import { useEffect, useRef, useState } from "react";
+import GraficoCabida, { type Matriz } from "./GraficoCabida";
+import TablaElementos, {
+  type Tabla,
+  type Ediciones,
+  edicionesVacias,
+} from "./TablaElementos";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
@@ -7,12 +13,62 @@ export default function App() {
   const [estado, setEstado] = useState<Estado>("cargando");
   const [paso, setPaso] = useState("Iniciando Python en el navegador…");
   const [file, setFile] = useState<File | null>(null);
+  const [csvText, setCsvText] = useState<string | null>(null);
   const [nSub, setNSub] = useState(1);
   const [working, setWorking] = useState(false);
   const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [matriz, setMatriz] = useState<Matriz | null>(null);
+  const [tabla, setTabla] = useState<Tabla | null>(null);
+  const [ediciones, setEdiciones] = useState<Ediciones>(edicionesVacias());
   const [msg, setMsg] = useState<{ t: "err" | "ok"; x: string } | null>(null);
   const pyRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Calcula tabla + resumen + matriz aplicando las ediciones (en vivo)
+  function recalcular(csv: string, ns: number, ed: Ediciones) {
+    const py = pyRef.current;
+    if (!py) return;
+    py.globals.set("csv_text", csv);
+    py.globals.set("n_sub", ns);
+    py.globals.set("ed_json", JSON.stringify(ed));
+    try {
+      const out = py.runPython(`
+import json
+_ed = json.loads(ed_json)
+json.dumps({
+  "tabla":   tabla_elementos(csv_text, n_sub, _ed),
+  "resumen": resumen_cabida(csv_text, n_sub, _ed),
+  "matriz":  matriz_cabida(csv_text, n_sub, _ed),
+})`);
+      const { tabla, resumen, matriz } = JSON.parse(out);
+      setTabla(tabla);
+      setResumen(resumen);
+      setMatriz(matriz);
+      setMsg(null);
+    } catch (e) {
+      setMsg({ t: "err", x: (e as Error).message });
+    }
+  }
+
+  // Carga un archivo nuevo: lee texto, resetea ediciones y recalcula
+  async function cargarArchivo(f: File | null) {
+    setFile(f);
+    setResumen(null); setMatriz(null); setTabla(null);
+    const ed = edicionesVacias();
+    setEdiciones(ed);
+    if (!f) { setCsvText(null); return; }
+    const csv = await f.text();
+    setCsvText(csv);
+    recalcular(csv, nSub, ed);
+  }
+
+  // Recalcula en vivo (debounce) cuando cambian ediciones o n_sub
+  useEffect(() => {
+    if (!csvText || estado !== "listo") return;
+    const id = setTimeout(() => recalcular(csvText, nSub, ediciones), 200);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ediciones, nSub, csvText, estado]);
 
   // Inicializa Pyodide + paquetes + motor (una sola vez)
   useEffect(() => {
@@ -40,18 +96,17 @@ export default function App() {
   }, []);
 
   async function generar() {
-    if (!file) { setMsg({ t: "err", x: "Selecciona el CSV exportado de Forma." }); return; }
+    if (!csvText) { setMsg({ t: "err", x: "Selecciona el CSV exportado de Forma." }); return; }
     const py = pyRef.current;
-    setWorking(true); setMsg(null); setResumen(null);
+    setWorking(true); setMsg(null);
     try {
-      const csv = await file.text();
-      py.globals.set("csv_text", csv);
+      py.globals.set("csv_text", csvText);
       py.globals.set("n_sub", nSub);
+      py.globals.set("ed_json", JSON.stringify(ediciones));
 
-      const res = py.runPython("import json; json.dumps(resumen_cabida(csv_text, n_sub))");
-      setResumen(JSON.parse(res));
-
-      const b64: string = py.runPython("generar_cabida(csv_text, n_sub)");
+      const b64: string = py.runPython(
+        "import json; generar_cabida(csv_text, n_sub, json.loads(ed_json))"
+      );
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       const blob = new Blob([bytes], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -97,11 +152,11 @@ export default function App() {
           type="file"
           accept=".csv"
           hidden
-          onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResumen(null); }}
+          onChange={(e) => { cargarArchivo(e.target.files?.[0] ?? null); }}
         />
 
         <div className="field">
-          <label>Número de subdivisiones (subterráneos)</label>
+          <label>Subterráneo</label>
           <input
             type="number"
             min={1}
@@ -125,6 +180,18 @@ export default function App() {
 
         {msg && <div className={"msg " + msg.t}>{msg.x}</div>}
       </div>
+
+      {tabla && (
+        <div className="card">
+          <TablaElementos tabla={tabla} matriz={matriz} ediciones={ediciones} setEdiciones={setEdiciones} nSub={nSub} />
+        </div>
+      )}
+
+      {matriz && (
+        <div className="card">
+          <GraficoCabida matriz={matriz} />
+        </div>
+      )}
 
       <p className="foot">mobil-forma v1.8 · MobilDataLab · Pyodide</p>
     </div>

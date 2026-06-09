@@ -147,6 +147,136 @@ def limpiar_gfa(v):
     s = str(v).replace('\xa0','').replace(' ','').replace(' ','')
     return pd.to_numeric(s, errors='coerce')
 
+# ── Lista de funciones canónicas válidas (para la UI de reclasificación) ──
+FUNCIONES_CANONICAS = list(ORDEN_FUNC)
+
+
+def _leer_csv(csv_text: str) -> pd.DataFrame:
+    """Lee el CSV (texto) y normaliza headers ES/FR -> EN. Sin derivar columnas."""
+    raw_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
+    line = raw_text.split('\n')[0]
+    sep = ';' if line.count(';') > line.count(',') else ','
+    df = pd.read_csv(io.StringIO(raw_text), sep=sep)
+    header_map = {
+        'ID': 'Id', 'id': 'Id',
+        'Tipo': 'Type', 'tipo': 'Type',
+        'Función': 'Function', 'Funcion': 'Function', 'Fonction': 'Function',
+        'función': 'Function', 'funcion': 'Function', 'fonction': 'Function',
+    }
+    df.rename(columns=header_map, inplace=True)
+    return df
+
+
+def _construir_df(csv_text: str, n_sub: int, ediciones=None):
+    """(df, n_sub) base con columnas derivadas + ediciones del usuario aplicadas.
+
+    `ediciones` (dict, opcional):
+      {
+        "n_sub": int,                      # opcional, sobrescribe n_sub
+        "reclasificar": {Id: "Func"},      # cambia Function (raw) por una canónica
+        "gfa":          {Id: float},        # sobrescribe GFA
+        "nivel":        {Id: int},          # sobrescribe nivel_raw
+        "excluir":      [Id, ...],          # filas a sacar del cálculo
+        "agregar": [                        # filas manuales
+           {"id": "manual-1", "funcion": "Residencial Terraza",
+            "gfa": 12.5, "nivel": 6, "type": "Manual"}, ...
+        ]
+      }
+    """
+    n_sub = int(n_sub)
+    ediciones = ediciones or {}
+    if ediciones.get('n_sub') is not None:
+        n_sub = int(ediciones['n_sub'])
+
+    def etiqueta_fn(x):
+        if x is None or (isinstance(x, float) and pd.isna(x)): return 'S/N'
+        x = int(x)
+        if x < n_sub: return f'ST-{n_sub - x}'
+        return f'N{x - n_sub + 1}'
+
+    df = _leer_csv(csv_text)
+    if 'Id' not in df.columns:   df['Id'] = ['row-%d' % i for i in range(len(df))]
+    if 'Type' not in df.columns: df['Type'] = ''
+    if 'Function' not in df.columns: df['Function'] = ''
+    df['Id'] = df['Id'].astype(str)
+
+    df['GFA']       = df['GFA'].apply(limpiar_gfa).fillna(0)
+    df['nivel_raw'] = df['Id'].apply(extraer_nivel)
+
+    # ── Aplicar ediciones por-Id ──
+    reclasif = ediciones.get('reclasificar') or {}
+    gfa_ed   = ediciones.get('gfa') or {}
+    nivel_ed = ediciones.get('nivel') or {}
+    excluir  = set(ediciones.get('excluir') or [])
+
+    if reclasif:
+        df['Function'] = df.apply(
+            lambda r: reclasif.get(r['Id'], r['Function']), axis=1)
+    if gfa_ed:
+        df['GFA'] = df.apply(
+            lambda r: float(gfa_ed[r['Id']]) if r['Id'] in gfa_ed else r['GFA'], axis=1)
+    if nivel_ed:
+        df['nivel_raw'] = df.apply(
+            lambda r: int(nivel_ed[r['Id']]) if r['Id'] in nivel_ed else r['nivel_raw'], axis=1)
+
+    # ── Filas manuales agregadas ──
+    agregar = ediciones.get('agregar') or []
+    if agregar:
+        nuevas = []
+        for a in agregar:
+            nv = a.get('nivel')
+            nuevas.append({
+                'Id': str(a.get('id', 'manual')),
+                'Type': a.get('type', 'Manual'),
+                'Function': a.get('funcion', 'Otro'),
+                'GFA': float(a.get('gfa', 0) or 0),
+                'nivel_raw': (int(nv) if nv is not None and str(nv) != '' else None),
+            })
+        if nuevas:
+            df = pd.concat([df, pd.DataFrame(nuevas)], ignore_index=True)
+
+    # ── Excluir ──
+    if excluir:
+        df = df[~df['Id'].isin(excluir)].reset_index(drop=True)
+
+    # ── Derivar el resto ──
+    df['Etiqueta'] = df['nivel_raw'].apply(etiqueta_fn)
+    df['Canonico'] = df['Function'].apply(canon)
+    df['FV']       = df['Canonico'].map(FACTOR_VENTA).fillna(0)
+    df['SV']       = df['GFA'] * df['FV']
+    df['Integra']  = df['Canonico'].map(CONSTRUIDO).fillna(False)
+    return df, n_sub
+
+
+def tabla_elementos(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    """Lista de elementos para la tabla editable de la UI.
+
+    Devuelve filas con Id, Type, Function (raw), Canonica, GFA, nivel, Etiqueta,
+    si integra construido y si la función original no se reconoció ('Otro').
+    """
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    filas = []
+    for row in df.itertuples(index=False):
+        nivel = getattr(row, 'nivel_raw', None)
+        filas.append({
+            'id':        str(row.Id),
+            'type':      '' if pd.isna(getattr(row, 'Type', '')) else str(getattr(row, 'Type', '')),
+            'function':  '' if pd.isna(row.Function) else str(row.Function),
+            'canonica':  str(row.Canonico),
+            'gfa':       round(float(row.GFA), 2),
+            'nivel':     (None if nivel is None or (isinstance(nivel, float) and pd.isna(nivel)) else int(nivel)),
+            'etiqueta':  str(row.Etiqueta),
+            'integra':   bool(row.Integra),
+            'es_otro':   str(row.Canonico) == 'Otro',
+            'es_manual': str(row.Id).startswith('manual'),
+        })
+    return {
+        'filas': filas,
+        'funciones_canonicas': FUNCIONES_CANONICAS,
+        'n_otro': int((df['Canonico'] == 'Otro').sum()),
+    }
+
+
 def fill(c):  return PatternFill('solid', fgColor=c)
 def fnt(bold=False, sz=10, color='1A1A1A', name='Arial Narrow'):
     return Font(name=name, bold=bold, size=sz, color=color)
@@ -170,39 +300,12 @@ def tot(ws, r, c, val, fmt=None, ha='right'):
     return cell
 
 
-def generar_cabida(csv_text: str, n_sub: int) -> str:
-    """Genera el Excel de cabida a partir del CSV (texto) y n_sub.
+def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
+    """Genera el Excel de cabida a partir del CSV (texto), n_sub y ediciones.
 
     Devuelve el contenido del .xlsx codificado en base64.
     """
-    n_sub = int(n_sub)
-
-    def etiqueta_fn(x):
-        if x is None: return 'S/N'
-        if x < n_sub: return f'ST-{n_sub - x}'
-        return f'N{x - n_sub + 1}'
-
-    # ── Leer CSV (texto ya decodificado) ──────────────────
-    raw_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
-    line = raw_text.split('\n')[0]
-    sep = ';' if line.count(';') > line.count(',') else ','
-    df = pd.read_csv(io.StringIO(raw_text), sep=sep)
-    # Normalizar headers ES->EN (Forma puede exportar en espanol)
-    header_map = {
-        'ID': 'Id', 'id': 'Id',
-        'Tipo': 'Type', 'tipo': 'Type',
-        'Función': 'Function', 'Funcion': 'Function', 'Fonction': 'Function',
-        'función': 'Function', 'funcion': 'Function', 'fonction': 'Function',
-    }
-    df.rename(columns=header_map, inplace=True)
-
-    df['GFA']       = df['GFA'].apply(limpiar_gfa).fillna(0)
-    df['nivel_raw'] = df['Id'].apply(extraer_nivel)
-    df['Etiqueta']  = df['nivel_raw'].apply(etiqueta_fn)
-    df['Canonico']  = df['Function'].apply(canon)
-    df['FV']        = df['Canonico'].map(FACTOR_VENTA).fillna(0)
-    df['SV']        = df['GFA'] * df['FV']
-    df['Integra']   = df['Canonico'].map(CONSTRUIDO).fillna(False)
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
 
     # === Tipologias (Residencial Util) y reparto de terraza ===
     df['building'] = df['Id'].astype(str).str.extract(r'root/([^/]+)/')
@@ -627,18 +730,43 @@ def generar_cabida(csv_text: str, n_sub: int) -> str:
     return base64.b64encode(buf.getvalue()).decode('ascii')
 
 
+# Matriz piso × función para graficar en la UI (barras horizontales apiladas)
+def matriz_cabida(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    funciones = [f for f in ORDEN_FUNC if f in df['Canonico'].unique()]
+
+    def sort_etq(e):
+        if e.startswith('ST-'):
+            try: return -1000 + int(e[3:])
+            except: return -999
+        elif e.startswith('N'):
+            try: return int(e[1:])
+            except: return 9999
+        return 9998
+
+    etiquetas = sorted(df['Etiqueta'].unique().tolist(), key=sort_etq)
+
+    piv = df.pivot_table(index='Etiqueta', columns='Canonico', values='GFA',
+                         aggfunc='sum', fill_value=0)
+    datos = []
+    for etq in etiquetas:
+        fila = {'etiqueta': etq, 'es_sub': etq.startswith('ST-')}
+        for fn in funciones:
+            v = float(piv.loc[etq, fn]) if (etq in piv.index and fn in piv.columns) else 0.0
+            fila[fn] = round(v, 2)
+        datos.append(fila)
+
+    return {
+        'etiquetas': etiquetas,
+        'funciones': funciones,
+        'colores': {fn: '#' + COLOR_CANONICO.get(fn, 'BFBFBF') for fn in funciones},
+        'datos': datos,
+    }
+
+
 # Resumen rápido para mostrar en la UI (sin generar el Excel completo)
-def resumen_cabida(csv_text: str, n_sub: int) -> dict:
-    raw_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
-    line = raw_text.split('\n')[0]
-    sep = ';' if line.count(';') > line.count(',') else ','
-    df = pd.read_csv(io.StringIO(raw_text), sep=sep)
-    df.rename(columns={'Fonction': 'Function', 'Funcion': 'Function', 'Función': 'Function'}, inplace=True)
-    df['GFA'] = df['GFA'].apply(limpiar_gfa).fillna(0)
-    df['Canonico'] = df['Function'].apply(canon)
-    df['FV'] = df['Canonico'].map(FACTOR_VENTA).fillna(0)
-    df['SV'] = df['GFA'] * df['FV']
-    df['Integra'] = df['Canonico'].map(CONSTRUIDO).fillna(False)
+def resumen_cabida(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
     venta = float(df['SV'].sum())
     const = float(df[df['Integra']]['GFA'].sum())
     efic = venta / const if const > 0 else 0
