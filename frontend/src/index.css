@@ -176,3 +176,49 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 }
 .chip:hover:not(:disabled) { background: #F2F8FE; border-color: var(--mobil-azul-claro); }
 .chip.on { background: var(--mobil-azul-claro); border-color: var(--mobil-azul-claro); color: #fff; }
+
+/* Paleta de colores canónicos */
+.tbl-paleta { font-size: 13px; }
+.tbl-paleta td { padding: 7px 10px; }
+.tbl-paleta .col-muestra { width: 60px; text-align: center; }
+.swatch {
+  display: inline-block; width: 30px; height: 18px; border-radius: 4px;
+  border: 1px solid rgba(0,0,0,.15); vertical-align: middle;
+}
+.rgb-copia {
+  width: auto; margin: 0; padding: 3px 8px; background: var(--mobil-bg);
+  border: 1px solid var(--mobil-borde); border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  color: var(--mobil-texto); font-weight: 400;
+}
+.rgb-copia:hover:not(:disabled) { background: #F2F8FE; border-color: var(--mobil-azul-claro); }
+.rgb-copia code { font-family: "Consolas", monospace; font-size: 12px; }
+.rgb-hint { font-size: 12px; color: var(--mobil-azul-claro); }
+
+/* Gráfico de torta — venta por función */
+.torta-body { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; margin-top: 8px; }
+.torta-body svg { flex: none; }
+.torta-leyenda { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 2px; }
+.tl-item {
+  display: grid; grid-template-columns: 14px 1fr auto auto; align-items: center;
+  gap: 10px; padding: 5px 0; font-size: 13px; border-bottom: 1px solid #eef3f9;
+}
+.tl-fn { color: var(--mobil-texto); }
+.tl-pct { font-weight: 700; color: var(--mobil-azul); text-align: right; min-width: 52px; }
+.tl-m2 { color: #5b6b80; text-align: right; min-width: 78px; font-size: 12px; }
+.tl-total { border-top: 2px solid var(--mobil-borde); border-bottom: none; margin-top: 4px; padding-top: 8px; }
+.tl-total .tl-fn, .tl-total .tl-pct, .tl-total .tl-m2 { font-weight: 700; color: var(--mobil-azul); }
+
+/* Estacionamientos · ratio */
+.estac-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 6px; }
+.estac-area { display: flex; flex-direction: column; gap: 2px; }
+.estac-area-val { font-size: 24px; font-weight: 700; color: var(--mobil-azul); }
+.estac-area-lbl { font-size: 12px; color: #5b6b80; }
+.estac-input { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.estac-input label { margin: 0; }
+.estac-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.estac-kpis .kpi { padding: 14px 8px; }
+.estac-kpis .kpi.kpi-ok span { color: #2e7d32; }
+.estac-kpis .kpi.kpi-warn span { color: #b8860b; }
+.estac-kpis .kpi.kpi-bad span { color: #b3261e; }
+.estac-hint { font-size: 12px; color: #91a0b3; margin: 16px 0 0; }

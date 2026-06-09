@@ -5,6 +5,9 @@ import TablaElementos, {
   type Ediciones,
   edicionesVacias,
 } from "./TablaElementos";
+import PaletaColores, { type ColorCanonico } from "./PaletaColores";
+import GraficoVenta, { type Venta } from "./GraficoVenta";
+import Estacionamientos, { type GfaEstac } from "./Estacionamientos";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
@@ -18,7 +21,10 @@ export default function App() {
   const [working, setWorking] = useState(false);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [matriz, setMatriz] = useState<Matriz | null>(null);
+  const [venta, setVenta] = useState<Venta | null>(null);
+  const [estac, setEstac] = useState<GfaEstac | null>(null);
   const [tabla, setTabla] = useState<Tabla | null>(null);
+  const [paleta, setPaleta] = useState<ColorCanonico[] | null>(null);
   const [ediciones, setEdiciones] = useState<Ediciones>(edicionesVacias());
   const [msg, setMsg] = useState<{ t: "err" | "ok"; x: string } | null>(null);
   const pyRef = useRef<any>(null);
@@ -39,11 +45,15 @@ json.dumps({
   "tabla":   tabla_elementos(csv_text, n_sub, _ed),
   "resumen": resumen_cabida(csv_text, n_sub, _ed),
   "matriz":  matriz_cabida(csv_text, n_sub, _ed),
+  "venta":   venta_por_funcion(csv_text, n_sub, _ed),
+  "estac":   gfa_estacionamientos(csv_text, n_sub, _ed),
 })`);
-      const { tabla, resumen, matriz } = JSON.parse(out);
+      const { tabla, resumen, matriz, venta, estac } = JSON.parse(out);
       setTabla(tabla);
       setResumen(resumen);
       setMatriz(matriz);
+      setVenta(venta);
+      setEstac(estac);
       setMsg(null);
     } catch (e) {
       setMsg({ t: "err", x: (e as Error).message });
@@ -53,7 +63,7 @@ json.dumps({
   // Carga un archivo nuevo: lee texto, resetea ediciones y recalcula
   async function cargarArchivo(f: File | null) {
     setFile(f);
-    setResumen(null); setMatriz(null); setTabla(null);
+    setResumen(null); setMatriz(null); setTabla(null); setVenta(null); setEstac(null);
     const ed = edicionesVacias();
     setEdiciones(ed);
     if (!f) { setCsvText(null); return; }
@@ -87,6 +97,10 @@ json.dumps({
         const code = await (await fetch("/cabida_core.py")).text();
         py.runPython(code);
         pyRef.current = py;
+        try {
+          const pal = py.runPython("import json; json.dumps(paleta_canonica())");
+          setPaleta(JSON.parse(pal));
+        } catch { /* paleta opcional */ }
         setEstado("listo");
       } catch (e) {
         setEstado("error");
@@ -190,6 +204,24 @@ json.dumps({
       {matriz && (
         <div className="card">
           <GraficoCabida matriz={matriz} />
+        </div>
+      )}
+
+      {venta && (
+        <div className="card">
+          <GraficoVenta venta={venta} />
+        </div>
+      )}
+
+      {estac && (
+        <div className="card">
+          <Estacionamientos estac={estac} />
+        </div>
+      )}
+
+      {paleta && (
+        <div className="card">
+          <PaletaColores paleta={paleta} />
         </div>
       )}
 

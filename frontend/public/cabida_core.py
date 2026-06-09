@@ -21,35 +21,39 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # ── Colores canónicos por función ─────────────────────────
+# Familias diferenciadas: Residencial (azules), Comercial (naranja/café),
+# Oficinas (verdes escalonados), Otros usos (gris-azulado, lila, gris medio).
 COLOR_CANONICO = {
-    'Residencial Util':    '2E74B5',
-    'Residencial Comun':   '1F3864',
-    'Residencial Terraza': '9DC3E6',
-    'Residencial Loggia':  'C5D9F1',
-    'Comercial Util':      'F4802A',
-    'Comercial Comun':     '843C0C',
-    'Oficinas Util':       '70AD47',
-    'Oficinas Comun':      '375623',
-    'Estacionamientos':    'E2EFDA',
-    'Ascensores':          'BFBFBF',
-    'Otro':                'F2F2F2',
+    'Residencial Util':    '2E74B5',  # azul medio
+    'Residencial Comun':   '1F3864',  # azul muy oscuro
+    'Residencial Terraza': '5B9BD5',  # azul claro
+    'Residencial Loggia':  'A9CCE3',  # azul pálido
+    'Comercial Util':      'F4802A',  # naranja
+    'Comercial Comun':     '843C0C',  # café
+    'Oficinas Util':       '92D050',  # lima
+    'Oficinas Comun':      '375623',  # verde muy oscuro
+    'Estacionamientos':    '7F8FA6',  # gris azulado medio
+    'Ascensores':          '9E7BB5',  # lila / violeta
+    'Otro':                'A6A6A6',  # gris medio
 }
 COLOR_TINT = {
     'Residencial Util':    'D6E4F4',
     'Residencial Comun':   'D0D9E8',
-    'Residencial Terraza': 'EBF4FB',
-    'Residencial Loggia':  'F4F8FD',
+    'Residencial Terraza': 'DCEBF7',
+    'Residencial Loggia':  'EAF2FA',
     'Comercial Util':      'FDE8D8',
     'Comercial Comun':     'E8D5CD',
-    'Oficinas Util':       'E2F0DA',
+    'Oficinas Util':       'E9F5D9',
     'Oficinas Comun':      'D5E2CF',
-    'Estacionamientos':    'F5FAF5',
-    'Ascensores':          'F5F5F5',
-    'Otro':                'FAFAFA',
+    'Estacionamientos':    'E6E9EF',
+    'Ascensores':          'EEE7F3',
+    'Otro':                'ECECEC',
 }
 FT_BLANCO  = 'FFFFFF'
 FT_OSCURO  = '1A1A1A'
-HDR_OSCUROS = {'Residencial Util','Residencial Comun','Comercial Comun','Oficinas Comun'}
+# Funciones cuyo color de fondo es oscuro -> texto blanco en encabezados
+HDR_OSCUROS = {'Residencial Util','Residencial Comun','Comercial Util','Comercial Comun',
+               'Oficinas Comun','Estacionamientos','Ascensores'}
 
 C_HDR_BG   = '1F3864'
 C_HDR_FT   = 'FFFFFF'
@@ -275,6 +279,53 @@ def tabla_elementos(csv_text: str, n_sub: int, ediciones=None) -> dict:
         'funciones_canonicas': FUNCIONES_CANONICAS,
         'n_otro': int((df['Canonico'] == 'Otro').sum()),
     }
+
+
+def venta_por_funcion(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    """Superficie de venta (SV) agregada por función canónica.
+
+    Devuelve solo las funciones con venta > 0 (las de factor 0 se omiten),
+    ordenadas de mayor a menor, con su color y % sobre el total de venta.
+    """
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    sv = df.groupby('Canonico')['SV'].sum()
+    total = float(sv.sum())
+    items = []
+    for fn in ORDEN_FUNC:
+        v = float(sv.get(fn, 0.0))
+        if v <= 0:
+            continue
+        items.append({
+            'funcion': fn,
+            'venta': round(v, 2),
+            'pct': round(v / total, 4) if total > 0 else 0.0,
+            'color': '#' + COLOR_CANONICO.get(fn, 'BFBFBF'),
+        })
+    items.sort(key=lambda x: x['venta'], reverse=True)
+    return {'items': items, 'total': round(total, 2)}
+
+
+def gfa_estacionamientos(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    """GFA total de la función Estacionamientos (respeta ediciones)."""
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    g = float(df[df['Canonico'] == 'Estacionamientos']['GFA'].sum())
+    n = int((df['Canonico'] == 'Estacionamientos').sum())
+    return {'gfa': round(g, 2), 'n_elementos': n}
+
+
+def paleta_canonica() -> list:
+    """Paleta de funciones canónicas con su color (hex y rgb)."""
+    out = []
+    for fn in ORDEN_FUNC:
+        h = COLOR_CANONICO.get(fn, 'BFBFBF')
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        out.append({
+            'funcion': fn,
+            'hex': '#' + h,
+            'rgb': [r, g, b],
+            'rgb_str': f'rgb({r}, {g}, {b})',
+        })
+    return out
 
 
 def fill(c):  return PatternFill('solid', fgColor=c)
