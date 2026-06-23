@@ -8,6 +8,7 @@ import TablaElementos, {
 import PaletaColores, { type ColorCanonico } from "./PaletaColores";
 import GraficoVenta, { type Venta } from "./GraficoVenta";
 import Estacionamientos, { type GfaEstac } from "./Estacionamientos";
+import CabidaEdificios, { type Edificios } from "./CabidaEdificios";
 import { IconoArchivo, IconoSubir } from "./iconos";
 import { MobilMark } from "./MobilMark";
 
@@ -18,6 +19,7 @@ type Resumen = { elementos: number; venta: number; construido: number; eficienci
 const VISTAS = [
   { id: "resumen", label: "Resumen" },
   { id: "cabida", label: "Cabida por piso" },
+  { id: "edificios", label: "Edificios" },
   { id: "venta", label: "Venta" },
   { id: "elementos", label: "Elementos" },
   { id: "estac", label: "Estacionamientos" },
@@ -36,6 +38,7 @@ export default function App() {
   const [matriz, setMatriz] = useState<Matriz | null>(null);
   const [venta, setVenta] = useState<Venta | null>(null);
   const [estac, setEstac] = useState<GfaEstac | null>(null);
+  const [edificios, setEdificios] = useState<Edificios | null>(null);
   const [tabla, setTabla] = useState<Tabla | null>(null);
   const [paleta, setPaleta] = useState<ColorCanonico[] | null>(null);
   const [ediciones, setEdiciones] = useState<Ediciones>(edicionesVacias());
@@ -65,13 +68,15 @@ json.dumps({
   "matriz":  matriz_cabida(csv_text, n_sub, _ed),
   "venta":   venta_por_funcion(csv_text, n_sub, _ed),
   "estac":   gfa_estacionamientos(csv_text, n_sub, _ed),
+  "edificios": cabida_por_edificio(csv_text, n_sub, _ed),
 })`);
-      const { tabla, resumen, matriz, venta, estac } = JSON.parse(out);
+      const { tabla, resumen, matriz, venta, estac, edificios } = JSON.parse(out);
       setTabla(tabla);
       setResumen(resumen);
       setMatriz(matriz);
       setVenta(venta);
       setEstac(estac);
+      setEdificios(edificios);
       setMsg(null);
     } catch (e) {
       setMsg({ t: "err", x: (e as Error).message });
@@ -81,7 +86,7 @@ json.dumps({
   // Carga un archivo nuevo: lee texto, resetea ediciones y recalcula
   async function cargarArchivo(f: File | null) {
     setFile(f);
-    setResumen(null); setMatriz(null); setTabla(null); setVenta(null); setEstac(null);
+    setResumen(null); setMatriz(null); setTabla(null); setVenta(null); setEstac(null); setEdificios(null);
     const ed = edicionesVacias();
     setEdiciones(ed);
     if (!f) { setCsvText(null); return; }
@@ -166,6 +171,7 @@ json.dumps({
   const dispo: Record<Vista, boolean> = {
     resumen: true,
     cabida: !!matriz,
+    edificios: !!edificios,
     venta: !!venta,
     elementos: !!tabla,
     estac: !!estac,
@@ -243,9 +249,9 @@ json.dumps({
                   <input
                     id="nsub"
                     type="number"
-                    min={1}
+                    min={0}
                     value={nSub}
-                    onChange={(e) => setNSub(Math.max(1, Number(e.target.value)))}
+                    onChange={(e) => setNSub(Math.max(0, Number(e.target.value)))}
                   />
                 </div>
 
@@ -273,6 +279,12 @@ json.dumps({
         {vistaActiva === "cabida" && matriz && (
           <div className="grid">
             <section className="panel col-12"><GraficoCabida matriz={matriz} /></section>
+          </div>
+        )}
+
+        {vistaActiva === "edificios" && edificios && (
+          <div className="grid">
+            <section className="panel col-12"><CabidaEdificios edificios={edificios} /></section>
           </div>
         )}
 
