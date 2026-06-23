@@ -157,6 +157,13 @@ def extraer_edificio(s):
         return parts[1]
     return None
 
+def es_departamento(tipo):
+    """True si el elemento es una unidad habitacional (departamento), según la
+    columna Tipo que exporta Forma. Robusto a acentos/mayúsculas/espacios."""
+    t = ''.join(c for c in unicodedata.normalize('NFD', str(tipo))
+                if unicodedata.category(c) != 'Mn').lower().strip()
+    return ' '.join(t.split()) == 'unidad habitacional'
+
 def limpiar_gfa(v):
     s = str(v).replace('\xa0','').replace(' ','').replace(' ','')
     return pd.to_numeric(s, errors='coerce')
@@ -335,6 +342,7 @@ def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
     df, n_sub = _construir_df(csv_text, n_sub, ediciones)
     df = df.copy()
     df['Edificio'] = df['Edificio'].fillna('Sin edificio')
+    df['_depto']   = df['Type'].apply(es_departamento)
 
     funciones_proyecto = [f for f in ORDEN_FUNC if f in df['Canonico'].unique()]
 
@@ -356,18 +364,20 @@ def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
             g = float(f_sub['GFA'].sum())
             funcs.append({
                 'funcion':  fn,
-                'unidades': int(len(f_sub)),
+                'unidades': int(len(f_sub)),          # elementos de la función
+                'deptos':   int(f_sub['_depto'].sum()),
                 'gfa':      round(g, 2),
                 'venta':    round(float(f_sub['SV'].sum()), 2),
                 'pct':      round(g / total_gfa, 4) if total_gfa > 0 else 0.0,
                 'color':    '#' + COLOR_CANONICO.get(fn, 'BFBFBF'),
             })
         edificios.append({
-            'edificio':  str(ed),
-            'unidades':  int(len(sub)),
-            'gfa':       round(total_gfa, 2),
-            'venta':     round(float(sub['SV'].sum()), 2),
-            'funciones': funcs,
+            'edificio':     str(ed),
+            'departamentos': int(sub['_depto'].sum()),
+            'unidades':     int(len(sub)),            # total de elementos
+            'gfa':          round(total_gfa, 2),
+            'venta':        round(float(sub['SV'].sum()), 2),
+            'funciones':    funcs,
         })
 
     return {
@@ -375,6 +385,7 @@ def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
         'funciones':   funciones_proyecto,
         'edificios':   edificios,
         'total': {
+            'departamentos': int(df['_depto'].sum()),
             'unidades': int(len(df)),
             'gfa':      round(float(df['GFA'].sum()), 2),
             'venta':    round(float(df['SV'].sum()), 2),
@@ -857,7 +868,7 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
     # ═══════════════════════════════════════════════════════
     ws_e = wb.create_sheet('Por Edificio')
 
-    EDI_HDRS   = ['Función','Unidades','m² (GFA)','Venta m²','% del edif.']
+    EDI_HDRS   = ['Función','Elem.','m² (GFA)','Venta m²','% del edif.']
     EDI_WIDTHS = [26,11,14,14,12]
     LAST_E = len(EDI_HDRS)
 
@@ -869,7 +880,8 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
         ws_e.column_dimensions[get_column_letter(i)].width=w
 
     # Agrupar por edificio (los sin edificio van al final)
-    df_e = df.assign(Edificio=df['Edificio'].fillna('Sin edificio'))
+    df_e = df.assign(Edificio=df['Edificio'].fillna('Sin edificio'),
+                     _depto=df['Type'].apply(es_departamento))
     gfa_por_ed = df_e.groupby('Edificio')['GFA'].sum().sort_values(ascending=False)
     orden_ed = [e for e in gfa_por_ed.index if e != 'Sin edificio']
     if 'Sin edificio' in gfa_por_ed.index:
@@ -880,11 +892,12 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
         sub = df_e[df_e['Edificio'] == ed]
         tot_gfa = float(sub['GFA'].sum())
         tot_uni = int(len(sub))
+        tot_dep = int(sub['_depto'].sum())
         tot_sv  = float(sub['SV'].sum())
 
         # Banda con el nombre del edificio + resumen
         ws_e.merge_cells(f'A{r}:{get_column_letter(LAST_E)}{r}')
-        cell=ws_e.cell(r,1,f'EDIFICIO  {ed}    ·    {tot_uni} unidades    ·    {tot_gfa:,.0f} m²')
+        cell=ws_e.cell(r,1,f'EDIFICIO  {ed}    ·    {tot_dep} departamentos    ·    {tot_gfa:,.0f} m²')
         cell.fill=fill(C_HDR_BG); cell.font=fnt(True,11,C_HDR_FT); cell.alignment=aln('left')
         ws_e.row_dimensions[r].height=22
         r+=1
