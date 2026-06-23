@@ -530,11 +530,21 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
     ws_d.row_dimensions[TR].height=20
     ws_d.freeze_panes='A3'
 
-    # Rangos de referencia para SUMIFS (sin fila de total)
-    D_GFA = f"Datos!$D$3:$D${TR-1}"
-    D_ETQ = f"Datos!$F$3:$F${TR-1}"
-    D_CAN = f"Datos!$G$3:$G${TR-1}"
-    D_SV  = f"Datos!$I$3:$I${TR-1}"
+    # ── Agregados precalculados ──────────────────────────────
+    # Cabida y Programa se escriben como VALORES (no fórmulas) para que NUNCA
+    # dependan del modo de cálculo de Excel (en modo Manual las fórmulas salían
+    # en blanco). Estos sums replican exactamente lo que hacían los SUMIFS.
+    gfa_ec  = df.groupby(['Etiqueta', 'Canonico'])['GFA'].sum()
+    gfa_fn  = df.groupby('Canonico')['GFA'].sum()
+    sv_fn   = df.groupby('Canonico')['SV'].sum()
+    sv_etq  = df.groupby('Etiqueta')['SV'].sum()
+    construido_fns = [fn for fn in funciones_presentes if CONSTRUIDO.get(fn, False)]
+    tot_construido_gfa = float(sum(float(gfa_fn.get(fn, 0.0)) for fn in construido_fns))
+    sv_total  = float(df['SV'].sum())
+    gfa_total = float(df['GFA'].sum())
+    def _gfa_ec(etq, fn):
+        try: return float(gfa_ec.loc[(etq, fn)])
+        except KeyError: return 0.0
 
     # ═══════════════════════════════════════════════════════
     # HOJA 2 — CABIDA
@@ -602,23 +612,18 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
         cell.fill=fill(bg_lbl); cell.font=fnt(is_sub,10)
         cell.alignment=aln('center'); cell.border=brd()
 
-        etq_ref = f'$A{row}'
-        construido_col_ltrs = []
         for fn, col in fn_cols.items():
-            fn_ref = f'{get_column_letter(col)}$3'
-            formula = f'=IFERROR(SUMIFS({D_GFA},{D_ETQ},{etq_ref},{D_CAN},{fn_ref}),0)'
             tint = COLOR_TINT.get(fn, C_ROW_ODD)
-            cell2=ws_c.cell(row,col,formula)
+            cell2=ws_c.cell(row,col,_gfa_ec(etq,fn))
             cell2.fill=fill(tint); cell2.font=fnt(False,10)
             cell2.alignment=aln('right'); cell2.border=brd(); cell2.number_format='#,##0'
-            if CONSTRUIDO.get(fn,False): construido_col_ltrs.append(get_column_letter(col))
 
-        f_tot = '='+'+'.join(f'{c}{row}' for c in construido_col_ltrs) if construido_col_ltrs else '=0'
-        c_tot=ws_c.cell(row,COL_TOTAL,f_tot)
+        tot_etq = float(sum(_gfa_ec(etq,fn) for fn in construido_fns))
+        c_tot=ws_c.cell(row,COL_TOTAL,tot_etq)
         c_tot.fill=fill(C_SUBTOT); c_tot.font=fnt(True,10)
         c_tot.alignment=aln('right'); c_tot.border=brd(C_HDR_BG); c_tot.number_format='#,##0'
 
-        c_sv=ws_c.cell(row,COL_VENTA,f'=IFERROR(SUMIFS({D_SV},{D_ETQ},{etq_ref}),0)')
+        c_sv=ws_c.cell(row,COL_VENTA,float(sv_etq.get(etq,0.0)))
         c_sv.fill=fill(C_SUBTOT); c_sv.font=fnt(True,10)
         c_sv.alignment=aln('right'); c_sv.border=brd(C_HDR_BG); c_sv.number_format='#,##0'
         ws_c.row_dimensions[row].height=18
@@ -627,32 +632,30 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
     TOT_C = DS + len(etiquetas)
     tot(ws_c,TOT_C,1,'TOTAL',ha='center')
     for fn, col in fn_cols.items():
-        ltr=get_column_letter(col)
-        c=ws_c.cell(TOT_C,col,f'=SUM({ltr}{DS}:{ltr}{TOT_C-1})')
+        c=ws_c.cell(TOT_C,col,float(gfa_fn.get(fn,0.0)))
         c.fill=fill(C_TOTAL_BG); c.font=fnt(True,10,C_TOTAL_FT)
         c.alignment=aln('right'); c.border=brd(C_HDR_BG); c.number_format='#,##0'
-    for col in [COL_TOTAL,COL_VENTA]:
-        ltr=get_column_letter(col)
-        c=ws_c.cell(TOT_C,col,f'=SUM({ltr}{DS}:{ltr}{TOT_C-1})')
+    for col,val in [(COL_TOTAL,tot_construido_gfa),(COL_VENTA,sv_total)]:
+        c=ws_c.cell(TOT_C,col,float(val))
         c.fill=fill(C_TOTAL_BG); c.font=fnt(True,10,C_TOTAL_FT)
         c.alignment=aln('right'); c.border=brd(C_HDR_BG); c.number_format='#,##0'
     ws_c.row_dimensions[TOT_C].height=20
 
     # KPIs
     KR = TOT_C + 2
-    venta_ref = f'{get_column_letter(COL_VENTA)}{TOT_C}'
-    tot_ref   = f'{get_column_letter(COL_TOTAL)}{TOT_C}'
-    efic_cell = f'B{KR+2}'
-    for r,(lbl,formula,fmt) in enumerate([
-        ('Sup. Venta',      f'={venta_ref}',                     '#,##0" m²"'),
-        ('Sup. Construida', f'={tot_ref}',                       '#,##0" m²"'),
-        ('Eficiencia',      f'=IFERROR({venta_ref}/{tot_ref},0)', '0.0%'),
-        ('Calificación',    f'=IF({efic_cell}>0.75,"🟢 Alta",IF({efic_cell}>0.5,"🟡 Media","🔴 Baja"))','@'),
+    eficiencia = (sv_total / tot_construido_gfa) if tot_construido_gfa > 0 else 0.0
+    calificacion = ('🟢 Alta' if eficiencia > 0.75
+                    else '🟡 Media' if eficiencia > 0.5 else '🔴 Baja')
+    for r,(lbl,val,fmt) in enumerate([
+        ('Sup. Venta',      sv_total,           '#,##0" m²"'),
+        ('Sup. Construida', tot_construido_gfa, '#,##0" m²"'),
+        ('Eficiencia',      eficiencia,         '0.0%'),
+        ('Calificación',    calificacion,       '@'),
     ], KR):
         c1=ws_c.cell(r,1,lbl)
         c1.fill=fill('1F4E79'); c1.font=fnt(True,10,C_HDR_FT)
         c1.alignment=aln('left'); c1.border=brd(C_BORDER_H)
-        c2=ws_c.cell(r,2,formula)
+        c2=ws_c.cell(r,2,val)
         c2.fill=fill(C_SUBTOT); c2.font=fnt(True,10)
         c2.alignment=aln('right'); c2.border=brd(); c2.number_format=fmt
 
@@ -675,8 +678,6 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
     ws_t.row_dimensions[2].height=20
 
     fn_row_map = {fn: 3+i for i,fn in enumerate(funciones_presentes)}
-    construido_rows = [fn_row_map[fn] for fn in funciones_presentes if CONSTRUIDO.get(fn,False)]
-    tot_construido_f = '+'.join(f'B{r}' for r in construido_rows) if construido_rows else '0'
 
     for fn in funciones_presentes:
         r   = fn_row_map[fn]
@@ -686,17 +687,17 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
         integra = CONSTRUIDO.get(fn,False)
         fv      = FACTOR_VENTA.get(fn,0)
         bg_d    = C_ROW_ODD if odd else C_ROW_EVEN
-        fn_ref  = f'$A{r}'
 
         c=ws_t.cell(r,1,fn)
         c.fill=fill(bg_fn); c.font=fnt(True,10,ft_fn)
         c.alignment=aln('left'); c.border=brd(C_BORDER_H)
 
-        c=ws_t.cell(r,2,f'=IFERROR(SUMIFS({D_GFA},{D_CAN},{fn_ref}),0)')
+        fn_gfa = float(gfa_fn.get(fn,0.0))
+        c=ws_t.cell(r,2,fn_gfa)
         c.fill=fill(bg_d); c.font=fnt(False,10)
         c.alignment=aln('right'); c.border=brd(); c.number_format='#,##0'
 
-        c=ws_t.cell(r,3,f'=IFERROR(SUMIFS({D_SV},{D_CAN},{fn_ref}),0)')
+        c=ws_t.cell(r,3,float(sv_fn.get(fn,0.0)))
         c.fill=fill(bg_d); c.font=fnt(False,10)
         c.alignment=aln('right'); c.border=brd(); c.number_format='#,##0'
 
@@ -705,7 +706,7 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
         c.alignment=aln('center'); c.border=brd(); c.number_format='0%'
 
         if integra:
-            c=ws_t.cell(r,5,f'=IFERROR(B{r}/({tot_construido_f}),0)')
+            c=ws_t.cell(r,5,(fn_gfa/tot_construido_gfa) if tot_construido_gfa>0 else 0.0)
             c.number_format='0.0%'
         else:
             c=ws_t.cell(r,5,'—')
@@ -724,12 +725,10 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
 
     TOT_T = 3 + len(funciones_presentes)
     tot(ws_t,TOT_T,1,'TOTAL',ha='center')
-    gfa_f = '='+'+'.join(f'B{fn_row_map[fn]}' for fn in funciones_presentes)
-    sv_f  = '='+'+'.join(f'C{fn_row_map[fn]}' for fn in funciones_presentes)
-    c=ws_t.cell(TOT_T,2,gfa_f)
+    c=ws_t.cell(TOT_T,2,gfa_total)
     c.fill=fill(C_TOTAL_BG); c.font=fnt(True,10,C_TOTAL_FT)
     c.alignment=aln('right'); c.border=brd(C_HDR_BG); c.number_format='#,##0'
-    c=ws_t.cell(TOT_T,3,sv_f)
+    c=ws_t.cell(TOT_T,3,sv_total)
     c.fill=fill(C_TOTAL_BG); c.font=fnt(True,10,C_TOTAL_FT)
     c.alignment=aln('right'); c.border=brd(C_HDR_BG); c.number_format='#,##0'
     for col in [4,5,6,7]:
