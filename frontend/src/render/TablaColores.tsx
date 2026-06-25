@@ -1,13 +1,16 @@
 import type { InspeccionImagen } from "./tipos";
-import { materialidadDe } from "./materialidad";
+import { opcionesDe } from "./materialidad";
 
-// Presentacional: lista los usos detectados (con checkbox de confirmación) y la escena.
+// Presentacional: usos detectados con checkbox de confirmación + selector de
+// materialidad por fila. La escena se muestra informativa.
 export default function TablaColores({
   inspeccion,
   onToggle,
+  onMaterialidad,
 }: {
   inspeccion: InspeccionImagen;
   onToggle: (funcion: string, confirmado: boolean) => void;
+  onMaterialidad: (funcion: string, materialidad: string) => void;
 }) {
   return (
     <div className="rnd-colores">
@@ -37,7 +40,16 @@ export default function TablaColores({
               <td><span className="rnd-sw" style={{ background: u.hex }} /></td>
               <td className="rnd-fn">{u.funcion}</td>
               <td className="num">{u.pct}%</td>
-              <td className="rnd-mat">{materialidadDe(u.funcion)}</td>
+              <td className="rnd-mat-cell">
+                <select
+                  className="rnd-mat-sel"
+                  value={u.materialidad}
+                  disabled={!u.confirmado}
+                  onChange={(e) => onMaterialidad(u.funcion, e.target.value)}
+                >
+                  {opcionesDe(u.funcion).map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </td>
             </tr>
           ))}
         </tbody>

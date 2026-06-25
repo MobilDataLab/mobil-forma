@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { ColorCanonico } from "../PaletaColores";
-import type { InspeccionImagen, CondicionesToma, Preset } from "./tipos";
+import type { InspeccionImagen, CondicionesToma, Preset, Ubicacion } from "./tipos";
 import { detectarColores } from "./colorDetector";
 import { construirJSON, aTexto } from "./jsonBuilder";
 import { PRESETS } from "./presetsProyecto";
@@ -10,11 +10,28 @@ import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
 const TOMA_DEFAULT: CondicionesToma = {
   luz: "warm late-afternoon daylight",
+  hora: "tarde",
+  sombras: "suaves",
+  camara: "vista peatonal",
+  lente: "normal (35-50mm)",
+  estilo: "fotorrealista",
+  detalle: "alto detalle",
+  postproceso: "natural",
   estacion: "seco",
   cielo: "despejado",
+  vegetacionDensidad: "media",
+  mobiliario: "básico (bancas, luminarias)",
+  fondo: "cerros / cordillera",
   atmosfera: "acogedor, familiar, seguro",
   genteAutos: "integrados",
+  acabado: "mate",
+  reflejos: "sutiles",
+  desgaste: "nuevo / impecable",
+  paletaTono: "neutra",
 };
+
+// Batuco por defecto (coincide con el preset).
+const UBIC_DEFAULT: Ubicacion = { lat: -33.222, lng: -70.808, etiqueta: "Batuco, Lampa, Región Metropolitana, Chile" };
 
 // Ancho objetivo del downscale para muestreo de color (rápido y suficiente).
 const DOWNSCALE = 240;
@@ -27,6 +44,7 @@ export default function RenderControlado({ paleta }: Props) {
   const [inspeccion, setInspeccion] = useState<InspeccionImagen | null>(null);
   const [preset, setPreset] = useState<Preset>(PRESETS.batuco);
   const [toma, setToma] = useState<CondicionesToma>(TOMA_DEFAULT);
+  const [ubicacion, setUbicacion] = useState<Ubicacion>(UBIC_DEFAULT);
   const [copiado, setCopiado] = useState(false);
   const [error, setError] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,10 +81,18 @@ export default function RenderControlado({ paleta }: Props) {
     });
   };
 
+  const cambiarMaterialidad = (funcion: string, materialidad: string) => {
+    if (!inspeccion) return;
+    setInspeccion({
+      ...inspeccion,
+      usos: inspeccion.usos.map((u) => (u.funcion === funcion ? { ...u, materialidad } : u)),
+    });
+  };
+
   const confirmados = inspeccion?.usos.filter((u) => u.confirmado) ?? [];
   const jsonText =
     inspeccion && confirmados.length
-      ? aTexto(construirJSON(confirmados, preset, toma))
+      ? aTexto(construirJSON(confirmados, preset, toma, ubicacion))
       : "";
 
   const copiar = () => {
@@ -107,15 +133,17 @@ export default function RenderControlado({ paleta }: Props) {
 
       {inspeccion && (
         <>
-          {/* 2. Confirmar usos detectados */}
-          <TablaColores inspeccion={inspeccion} onToggle={toggle} />
+          {/* 2. Confirmar usos detectados + materialidad por función */}
+          <TablaColores inspeccion={inspeccion} onToggle={toggle} onMaterialidad={cambiarMaterialidad} />
 
-          {/* 3. Condiciones (preset + toma) */}
+          {/* 3. Condiciones (preset + mapa + ejes de toma) */}
           <PanelCondiciones
             presetId={preset.id}
             toma={toma}
+            ubicacion={ubicacion}
             onPreset={setPreset}
             onToma={(patch) => setToma((t) => ({ ...t, ...patch }))}
+            onUbicacion={setUbicacion}
           />
 
           {/* 4. JSON de salida + copiar */}
