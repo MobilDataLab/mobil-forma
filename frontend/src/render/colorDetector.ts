@@ -1,5 +1,6 @@
 import type { InspeccionImagen, RGB, UsoDetectado, ColorEscena } from "./tipos";
 import type { ColorCanonico } from "../PaletaColores";
+import { materialidadDe } from "./materialidad";
 
 export type OpcionesDeteccion = {
   umbral?: number;    // distancia RGB máx. para considerar match (default 40)
@@ -94,7 +95,10 @@ export function detectarColores(
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
   const usos: UsoDetectado[] = [...contProy.entries()]
-    .map(([funcion, n]) => ({ funcion, hex: hexDe.get(funcion) ?? "#000000", pct: pct(n), confirmado: true }))
+    .map(([funcion, n]) => ({
+      funcion, hex: hexDe.get(funcion) ?? "#000000", pct: pct(n),
+      confirmado: true, materialidad: materialidadDe(funcion),
+    }))
     .filter((u) => u.pct >= minPct)
     .sort((a, b) => b.pct - a.pct);
 

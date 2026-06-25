@@ -701,6 +701,24 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .rnd-json { margin: 12px 0 0; background: var(--gray-50); border: 1px solid var(--gray-200); padding: 16px; font: 400 12px var(--ff-mono); color: var(--ink); white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
 @media (max-width: 760px) { .rnd-drop-row { flex-direction: column; } .rnd-preview { width: 100%; } }
 
+/* Selector de materialidad por fila */
+.rnd-mat-cell { min-width: 280px; }
+.rnd-mat-sel { width: 100%; padding: 7px 8px; border: 1px solid var(--gray-200); border-radius: 0; background: #fff; font: 400 12px var(--bd); color: var(--gray-700); }
+.rnd-mat-sel:hover:not(:disabled) { border-color: var(--blue); }
+.rnd-mat-sel:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+.rnd-mat-sel:disabled { opacity: .5; }
+
+/* Preset + mapa */
+.rnd-preset-row { display: grid; grid-template-columns: minmax(220px, 360px); gap: 14px; }
+.rnd-mapa-wrap { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.rnd-mapa-row { display: flex; gap: 8px; }
+.rnd-mapa-busca { flex: 1; padding: 9px 10px; border: 1px solid var(--gray-200); border-radius: 0; font: 400 13px var(--bd); }
+.rnd-mapa-busca:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+.rnd-mapa { width: 100%; height: 280px; border: 1px solid var(--gray-200); }
+.rnd-mapa-coords { font: 400 11px var(--bd); color: var(--gray-400); }
+/* Leaflet: que los controles no tapen el chrome de la app */
+.leaflet-container { font-family: var(--bd); }
+
 /* ── Control: botón "subterráneos por edificio" (reemplaza input global) ── */
 .control-edif {
   width: 100%; padding: 12px 14px; border: 1px solid var(--gray-200); border-radius: 0;
