@@ -21,3 +21,7 @@ dist/
 
 # Claude Code (config local)
 .claude/
+
+# Handoffs de diseño (referencia, no código de producción)
+design_handoff_redesign_ui/
+design_handoff_ui_redesign/

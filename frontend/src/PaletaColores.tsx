@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { exportarCsv } from "./exportar";
 import { IconoDescarga } from "./iconos";
 
 export type ColorCanonico = {
@@ -9,7 +8,13 @@ export type ColorCanonico = {
   rgb_str: string;
 };
 
-export default function PaletaColores({ paleta }: { paleta: ColorCanonico[] }) {
+export default function PaletaColores({
+  paleta,
+  onDescargarExcel,
+}: {
+  paleta: ColorCanonico[];
+  onDescargarExcel?: () => void;
+}) {
   const [copiado, setCopiado] = useState<string | null>(null);
 
   const copiar = (texto: string, clave: string) => {
@@ -23,13 +28,6 @@ export default function PaletaColores({ paleta }: { paleta: ColorCanonico[] }) {
   const copiarTodo = () =>
     copiar(paleta.map((p) => `${p.funcion}\t${p.rgb_str}`).join("\n"), "__all__");
 
-  const exportarTabla = () =>
-    exportarCsv(
-      "paleta-canonica",
-      ["Función canónica", "HEX", "RGB"],
-      paleta.map((p) => [p.funcion, p.hex, p.rgb_str])
-    );
-
   return (
     <div className="paleta">
       <div className="tabla-head">
@@ -38,8 +36,13 @@ export default function PaletaColores({ paleta }: { paleta: ColorCanonico[] }) {
           <button className="btn-link" onClick={copiarTodo}>
             {copiado === "__all__" ? "¡Copiado!" : "Copiar tabla"}
           </button>
-          <button className="btn-export" onClick={exportarTabla} title="Descargar la paleta como CSV">
-            <IconoDescarga /> CSV
+          <button
+            className="btn-export"
+            onClick={onDescargarExcel}
+            disabled={!onDescargarExcel}
+            title="Descargar la paleta como Excel (con celdas de color)"
+          >
+            <IconoDescarga /> Excel
           </button>
         </div>
       </div>

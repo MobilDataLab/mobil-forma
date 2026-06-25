@@ -6,10 +6,16 @@ import TablaElementos, {
   edicionesVacias,
 } from "./TablaElementos";
 import PaletaColores, { type ColorCanonico } from "./PaletaColores";
-import GraficoVenta, { type Venta } from "./GraficoVenta";
-import Estacionamientos, { type GfaEstac } from "./Estacionamientos";
+import { type Venta } from "./GraficoVenta";
+import Estacionamientos, { type GfaEstac, estacParaExcel } from "./Estacionamientos";
+import CabidaEdificios, { type Edificios } from "./CabidaEdificios";
+import CabidaSuperficies, { type Superficies } from "./CabidaSuperficies";
+import MatrizElementos from "./MatrizElementos";
+import NormasUrbanisticas, { type Normas, normasParaExcel } from "./NormasUrbanisticas";
 import { IconoArchivo, IconoSubir } from "./iconos";
 import { MobilMark } from "./MobilMark";
+import { descargarXlsxBase64 } from "./exportar";
+import AsistenteCarga, { type Inspeccion, type ConfigEdificios } from "./AsistenteCarga";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
@@ -17,10 +23,11 @@ type Resumen = { elementos: number; venta: number; construido: number; eficienci
 // Secciones (vista por páginas). El orden define el de las pestañas.
 const VISTAS = [
   { id: "resumen", label: "Resumen" },
-  { id: "cabida", label: "Cabida por piso" },
-  { id: "venta", label: "Venta" },
   { id: "elementos", label: "Elementos" },
   { id: "estac", label: "Estacionamientos" },
+  { id: "edificios", label: "Edificios" },
+  { id: "normas", label: "Normas" },
+  { id: "cabida", label: "Cabida por piso" },
   { id: "paleta", label: "Paleta" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
@@ -30,16 +37,26 @@ export default function App() {
   const [paso, setPaso] = useState("Iniciando Python en el navegador…");
   const [file, setFile] = useState<File | null>(null);
   const [csvText, setCsvText] = useState<string | null>(null);
-  const [nSub, setNSub] = useState(1);
+  // Base global de subterráneos (compat). Hoy la config real es por edificio
+  // (ediciones.subterraneos); este global solo aplica a edificios sin mapear.
+  const [nSub] = useState(0);
   const [working, setWorking] = useState(false);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [matriz, setMatriz] = useState<Matriz | null>(null);
+  const [superficies, setSuperficies] = useState<Superficies | null>(null);
+  const [normas, setNormas] = useState<Normas | null>(null);
   const [venta, setVenta] = useState<Venta | null>(null);
   const [estac, setEstac] = useState<GfaEstac | null>(null);
+  const [edificios, setEdificios] = useState<Edificios | null>(null);
   const [tabla, setTabla] = useState<Tabla | null>(null);
   const [paleta, setPaleta] = useState<ColorCanonico[] | null>(null);
   const [ediciones, setEdiciones] = useState<Ediciones>(edicionesVacias());
   const [msg, setMsg] = useState<{ t: "err" | "ok"; x: string } | null>(null);
+  // Asistente de carga: inspección del CSV recién subido (pendiente de confirmar).
+  const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null);
+  const [pendiente, setPendiente] = useState<{ file: File; csv: string } | null>(null);
+  const [subPrevios, setSubPrevios] = useState<Record<string, number>>({});
+  const [verLista, setVerLista] = useState(false);
   // Sección activa (se recuerda entre recargas).
   const [vista, setVista] = useState<Vista>(() => {
     const v = localStorage.getItem("mobil-vista");
@@ -65,29 +82,90 @@ json.dumps({
   "matriz":  matriz_cabida(csv_text, n_sub, _ed),
   "venta":   venta_por_funcion(csv_text, n_sub, _ed),
   "estac":   gfa_estacionamientos(csv_text, n_sub, _ed),
+  "edificios": cabida_por_edificio(csv_text, n_sub, _ed),
+  "superficies": cabida_superficies(csv_text, n_sub, _ed),
+  "normas":  metricas_normativas(csv_text, n_sub, _ed),
 })`);
-      const { tabla, resumen, matriz, venta, estac } = JSON.parse(out);
+      const { tabla, resumen, matriz, venta, estac, edificios, superficies, normas } = JSON.parse(out);
       setTabla(tabla);
       setResumen(resumen);
       setMatriz(matriz);
       setVenta(venta);
       setEstac(estac);
+      setEdificios(edificios);
+      setSuperficies(superficies);
+      setNormas(normas);
       setMsg(null);
     } catch (e) {
       setMsg({ t: "err", x: (e as Error).message });
     }
   }
 
-  // Carga un archivo nuevo: lee texto, resetea ediciones y recalcula
+  // Carga un archivo nuevo: lee texto, inspecciona edificios y abre el asistente.
   async function cargarArchivo(f: File | null) {
-    setFile(f);
-    setResumen(null); setMatriz(null); setTabla(null); setVenta(null); setEstac(null);
-    const ed = edicionesVacias();
-    setEdiciones(ed);
-    if (!f) { setCsvText(null); return; }
+    setResumen(null); setMatriz(null); setTabla(null); setVenta(null); setEstac(null); setEdificios(null); setSuperficies(null); setNormas(null);
+    setEdiciones(edicionesVacias());
+    setMsg(null);
+    if (!f) { setFile(null); setCsvText(null); setInspeccion(null); setPendiente(null); return; }
     const csv = await f.text();
-    setCsvText(csv);
-    recalcular(csv, nSub, ed);
+    const py = pyRef.current;
+    if (!py) { setMsg({ t: "err", x: "El motor aún se está cargando." }); return; }
+    try {
+      py.globals.set("csv_text", csv);
+      const out = py.runPython("import json; json.dumps(inspeccionar_csv(csv_text))");
+      const insp: Inspeccion = JSON.parse(out);
+      // Abrir el asistente: el cálculo espera a la confirmación del usuario.
+      setSubPrevios({});
+      setPendiente({ file: f, csv });
+      setInspeccion(insp);
+    } catch (e) {
+      setMsg({ t: "err", x: (e as Error).message });
+    }
+  }
+
+  // El usuario confirmó nombres y subterráneos por edificio → calcular.
+  function confirmarAsistente(cfg: ConfigEdificios) {
+    if (!pendiente) return;
+    const ed: Ediciones = {
+      ...edicionesVacias(),
+      subterraneos: cfg.subterraneos,
+      nombres_edificio: cfg.nombres,
+    };
+    setFile(pendiente.file);
+    setCsvText(pendiente.csv);
+    setEdiciones(ed);
+    recalcular(pendiente.csv, nSub, ed);
+    setInspeccion(null);
+    setPendiente(null);
+  }
+
+  function cancelarAsistente() {
+    setInspeccion(null);
+    setPendiente(null);
+  }
+
+  // Reabre el asistente para el CSV ya cargado, precargando la config actual.
+  function reabrirAsistente() {
+    const py = pyRef.current;
+    if (!py || !csvText || !file) return;
+    try {
+      py.globals.set("csv_text", csvText);
+      const out = py.runPython("import json; json.dumps(inspeccionar_csv(csv_text))");
+      const insp: Inspeccion = JSON.parse(out);
+      // Aplicar los valores ya elegidos (si los hay) sobre los defaults.
+      const nombres = ediciones.nombres_edificio ?? {};
+      const subs = ediciones.subterraneos ?? {};
+      insp.edificios = insp.edificios.map((e) => ({
+        ...e,
+        nombre_default: nombres[e.id] ?? e.nombre_default,
+      }));
+      setPendiente({ file, csv: csvText });
+      setInspeccion(insp);
+      // Guardamos los subterráneos previos para que el asistente los muestre.
+      setSubPrevios(subs);
+    } catch (e) {
+      setMsg({ t: "err", x: (e as Error).message });
+    }
   }
 
   // Recalcula en vivo (debounce) cuando cambian ediciones o n_sub
@@ -157,7 +235,54 @@ json.dumps({
     }
   }
 
+  // Descarga el Excel "tipo Mobil": Superficies x Piso + Normativa + Estacionamientos
+  // (estas dos últimas con lo que el usuario tiene en pantalla).
+  function descargarSuperficiesExcel() {
+    const py = pyRef.current;
+    if (!py || !csvText) { setMsg({ t: "err", x: "Carga un CSV primero." }); return; }
+    try {
+      const extra = {
+        normas: normas ? normasParaExcel(normas) : null,
+        estac: estacParaExcel(),
+      };
+      py.globals.set("csv_text", csvText);
+      py.globals.set("n_sub", nSub);
+      py.globals.set("ed_json", JSON.stringify(ediciones));
+      py.globals.set("extra_json", JSON.stringify(extra));
+      const b64: string = py.runPython(
+        "import json; superficies_xlsx(csv_text, n_sub, json.loads(ed_json), json.loads(extra_json))"
+      );
+      descargarXlsxBase64(b64, "cabida-por-piso");
+    } catch (e) {
+      setMsg({ t: "err", x: (e as Error).message });
+    }
+  }
+
+  // Descarga la paleta canónica como Excel "tipo Mobil" (celdas con el color real).
+  function descargarPaletaExcel() {
+    const py = pyRef.current;
+    if (!py) { setMsg({ t: "err", x: "El motor aún se está cargando." }); return; }
+    try {
+      const b64: string = py.runPython("paleta_xlsx()");
+      descargarXlsxBase64(b64, "paleta-canonica");
+    } catch (e) {
+      setMsg({ t: "err", x: (e as Error).message });
+    }
+  }
+
   const fmt = (n: number) => n.toLocaleString("es-CL");
+
+  // Texto del botón que resume la config por edificio (reemplaza el nº global).
+  const subs = ediciones.subterraneos ?? {};
+  const nConSub = Object.values(subs).filter((v) => v > 0).length;
+  const nEdif = Object.keys(ediciones.nombres_edificio ?? {}).length;
+  const resumenSub = !csvText
+    ? "Carga un CSV"
+    : nEdif === 0
+    ? "Editar edificios"
+    : nConSub === 0
+    ? `${nEdif} edificios · sin subt.`
+    : `${nConSub}/${nEdif} con subt.`;
 
   // Persistir la pestaña elegida.
   useEffect(() => { localStorage.setItem("mobil-vista", vista); }, [vista]);
@@ -165,10 +290,11 @@ json.dumps({
   // Qué secciones tienen datos para mostrarse (las demás quedan deshabilitadas).
   const dispo: Record<Vista, boolean> = {
     resumen: true,
-    cabida: !!matriz,
-    venta: !!venta,
+    cabida: !!superficies,
+    edificios: !!edificios,
     elementos: !!tabla,
     estac: !!estac,
+    normas: !!normas,
     paleta: !!paleta,
   };
   // Si la pestaña recordada aún no tiene datos, caemos a «Resumen».
@@ -179,7 +305,7 @@ json.dumps({
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <span className="brand-mark"><MobilMark size={20} /></span>
+            <span className="brand-mark"><MobilMark size={28} /></span>
             <div className="brand-text">
               <h1>MOBIL · CABIDA</h1>
               <span className="brand-tag">Análisis de cabida · Autodesk Forma → Excel</span>
@@ -191,7 +317,7 @@ json.dumps({
           {VISTAS.map((v) => (
             <button
               key={v.id}
-              className={"tab" + (vistaActiva === v.id ? " on" : "")}
+              className={"tab" + (vistaActiva === v.id ? " on" : "") + (v.id === "paleta" ? " tab-right" : "")}
               onClick={() => setVista(v.id)}
               disabled={!dispo[v.id]}
               title={dispo[v.id] ? undefined : "Carga un CSV para ver esta sección"}
@@ -239,14 +365,15 @@ json.dumps({
                 </div>
 
                 <div className="field">
-                  <label htmlFor="nsub">Subterráneos</label>
-                  <input
-                    id="nsub"
-                    type="number"
-                    min={1}
-                    value={nSub}
-                    onChange={(e) => setNSub(Math.max(1, Number(e.target.value)))}
-                  />
+                  <label>Subterráneos</label>
+                  <button
+                    className="control-edif"
+                    onClick={reabrirAsistente}
+                    disabled={!csvText}
+                    title={csvText ? "Editar nombres y subterráneos por edificio" : "Carga un CSV primero"}
+                  >
+                    {resumenSub}
+                  </button>
                 </div>
 
                 <div className="field field-cta">
@@ -264,28 +391,43 @@ json.dumps({
                 <div className="kpi"><span>{fmt(resumen.elementos)}</span>Elementos</div>
                 <div className="kpi"><span>{fmt(resumen.construido)}</span>Construido m²</div>
                 <div className="kpi"><span>{fmt(resumen.venta)}</span>Venta m²</div>
-                <div className="kpi"><span>{(resumen.eficiencia * 100).toFixed(1)}%</span>Eficiencia</div>
+                <div className="kpi kpi-efic"><span>{(resumen.eficiencia * 100).toFixed(1)}%</span>Eficiencia · venta / construido</div>
               </section>
             )}
           </>
         )}
 
-        {vistaActiva === "cabida" && matriz && (
+        {vistaActiva === "cabida" && superficies && (
           <div className="grid">
-            <section className="panel col-12"><GraficoCabida matriz={matriz} /></section>
+            <section className="panel col-12"><CabidaSuperficies superficies={superficies} onDescargarExcel={descargarSuperficiesExcel} /></section>
           </div>
         )}
 
-        {vistaActiva === "venta" && venta && (
+        {vistaActiva === "edificios" && edificios && (
           <div className="grid">
-            <section className="panel col-12"><GraficoVenta venta={venta} /></section>
+            <section className="panel col-12"><CabidaEdificios edificios={edificios} /></section>
           </div>
         )}
 
-        {vistaActiva === "elementos" && tabla && (
+        {vistaActiva === "elementos" && superficies && tabla && (
           <div className="grid">
             <section className="panel col-12">
-              <TablaElementos tabla={tabla} matriz={matriz} ediciones={ediciones} setEdiciones={setEdiciones} nSub={nSub} />
+              <MatrizElementos
+                superficies={superficies}
+                funcionesCanonicas={tabla.funciones_canonicas}
+                ediciones={ediciones}
+                setEdiciones={setEdiciones}
+              />
+              <div className="mx-toggle">
+                <button className="btn-link" onClick={() => setVerLista((v) => !v)}>
+                  {verLista ? "▾ Ocultar lista de elementos" : "▸ Ver lista de elementos (reclasificar / excluir)"}
+                </button>
+              </div>
+              {verLista && (
+                <div className="mx-lista">
+                  <TablaElementos tabla={tabla} matriz={matriz} ediciones={ediciones} setEdiciones={setEdiciones} nSub={nSub} />
+                </div>
+              )}
             </section>
           </div>
         )}
@@ -296,13 +438,30 @@ json.dumps({
           </div>
         )}
 
+        {vistaActiva === "normas" && normas && (
+          <div className="grid">
+            <section className="panel col-12"><NormasUrbanisticas normas={normas} /></section>
+          </div>
+        )}
+
         {vistaActiva === "paleta" && paleta && (
           <div className="grid">
-            <section className="panel col-12 panel-paleta"><PaletaColores paleta={paleta} /></section>
+            <section className="panel col-12 panel-paleta"><PaletaColores paleta={paleta} onDescargarExcel={descargarPaletaExcel} /></section>
           </div>
         )}
       </main>
 
+      {inspeccion && pendiente && (
+        <AsistenteCarga
+          inspeccion={inspeccion}
+          nombreArchivo={pendiente.file.name}
+          subInicial={subPrevios}
+          onConfirmar={confirmarAsistente}
+          onCancelar={cancelarAsistente}
+        />
+      )}
+
+      <div className="foot-bar" />
       <footer className="foot">mobil-forma v1.8 · MobilDataLab · Pyodide</footer>
     </div>
   );
