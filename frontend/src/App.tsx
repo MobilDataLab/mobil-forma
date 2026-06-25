@@ -16,6 +16,7 @@ import { IconoArchivo, IconoSubir } from "./iconos";
 import { MobilMark } from "./MobilMark";
 import { descargarXlsxBase64 } from "./exportar";
 import AsistenteCarga, { type Inspeccion, type ConfigEdificios } from "./AsistenteCarga";
+import RenderControlado from "./render/RenderControlado";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
@@ -29,6 +30,7 @@ const VISTAS = [
   { id: "normas", label: "Normas" },
   { id: "cabida", label: "Cabida por piso" },
   { id: "paleta", label: "Paleta" },
+  { id: "render", label: "Render" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
 
@@ -296,6 +298,7 @@ json.dumps({
     estac: !!estac,
     normas: !!normas,
     paleta: !!paleta,
+    render: !!paleta,   // independiente del CSV; solo necesita la paleta del motor
   };
   // Si la pestaña recordada aún no tiene datos, caemos a «Resumen».
   const vistaActiva: Vista = dispo[vista] ? vista : "resumen";
@@ -447,6 +450,12 @@ json.dumps({
         {vistaActiva === "paleta" && paleta && (
           <div className="grid">
             <section className="panel col-12 panel-paleta"><PaletaColores paleta={paleta} onDescargarExcel={descargarPaletaExcel} /></section>
+          </div>
+        )}
+
+        {vistaActiva === "render" && paleta && (
+          <div className="grid">
+            <section className="panel col-12"><RenderControlado paleta={paleta} /></section>
           </div>
         )}
       </main>
