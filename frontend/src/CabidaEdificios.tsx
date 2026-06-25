@@ -15,14 +15,16 @@ export type EdificioItem = {
   departamentos: number;
   unidades: number; // total de elementos
   gfa: number;
+  construido: number;
   venta: number;
+  eficiencia: number;
   funciones: EdificioFuncion[];
 };
 export type Edificios = {
   n_edificios: number;
   funciones: string[];
   edificios: EdificioItem[];
-  total: { departamentos: number; unidades: number; gfa: number; venta: number };
+  total: { departamentos: number; unidades: number; gfa: number; construido: number; venta: number; eficiencia: number };
 };
 
 const fmt = (n: number, dec = 0) =>
@@ -72,8 +74,9 @@ export default function CabidaEdificios({ edificios }: { edificios: Edificios })
                 <div className="edif-id" title={ed.edificio}>{ed.edificio}</div>
                 <div className="edif-kpis">
                   <div className="edif-kpi"><span>{fmt(ed.departamentos)}</span>deptos.</div>
-                  <div className="edif-kpi"><span>{fmt(ed.gfa)}</span>m² GFA</div>
+                  <div className="edif-kpi"><span>{fmt(ed.construido)}</span>construido m²</div>
                   <div className="edif-kpi"><span>{fmt(ed.venta)}</span>venta m²</div>
+                  <div className="edif-kpi edif-efic"><span>{pct(ed.eficiencia)}</span>eficiencia</div>
                 </div>
               </header>
 
@@ -108,6 +111,10 @@ export default function CabidaEdificios({ edificios }: { edificios: Edificios })
                     <td className="num">{fmt(ed.gfa)}</td>
                     <td className="num">{fmt(ed.venta)}</td>
                     <td className="num">100%</td>
+                  </tr>
+                  <tr className="edif-efic-row">
+                    <td colSpan={3}>Eficiencia · venta / construido</td>
+                    <td className="num" colSpan={2}>{pct(ed.eficiencia)}</td>
                   </tr>
                 </tfoot>
               </table>

@@ -71,31 +71,41 @@ export default function GraficoCabida({ matriz }: { matriz: Matriz }) {
             />
             <text
               x={labelW + x(t)} y={height - padBottom + 17}
-              textAnchor="middle" fontSize={9.5} fill="#8A97AB"
+              textAnchor="middle" fontSize={9.5} fill="#A3A3A3"
             >
               {fmt(t)}
             </text>
           </g>
         ))}
-        {/* eje base */}
-        <line x1={labelW} x2={labelW} y1={padTop} y2={height - padBottom} stroke="#D2DEEC" strokeWidth={1} />
+        {/* eje base (regla 1px ink) */}
+        <line x1={labelW} x2={labelW} y1={padTop} y2={height - padBottom} stroke="#1A1A1A" strokeWidth={1} />
 
         {filas.map((f, i) => {
           const y = padTop + i * (rowH + gap);
           let acc = 0;
+          // Línea de terreno: entre el último piso sobre rasante y el primer subterráneo.
+          const anterior = filas[i - 1];
+          const lineaTerreno = i > 0 && f.es_sub && !anterior?.es_sub;
           return (
             <g key={f.etiqueta as string}>
+              {/* línea de terreno (1px ink) entre N1 y ST-1 */}
+              {lineaTerreno && (
+                <line
+                  x1={labelW} x2={width - 4} y1={y - gap / 2} y2={y - gap / 2}
+                  stroke="#1A1A1A" strokeWidth={1}
+                />
+              )}
               {/* pista de fondo (referencia visual hasta el piso más cargado) */}
               <rect
-                x={labelW} y={y} width={plotW} height={rowH} rx={4}
-                fill={f.es_sub ? "#F1F5FA" : "#F6F9FC"}
+                x={labelW} y={y} width={plotW} height={rowH} rx={0}
+                fill={f.es_sub ? "#EFEFEF" : "#F5F5F5"}
               />
               {/* etiqueta del piso */}
               <text
                 x={labelW - 10} y={y + rowH / 2}
                 textAnchor="end" dominantBaseline="central"
                 fontSize={10.5} fontWeight={f.es_sub ? 700 : 500}
-                fill={f.es_sub ? "#1F3864" : "#56657C"}
+                fill={f.es_sub ? "#011D41" : "#555555"}
               >
                 {f.etiqueta as string}
               </text>
@@ -122,7 +132,7 @@ export default function GraficoCabida({ matriz }: { matriz: Matriz }) {
               {totalFila(f) > 0 && (
                 <text
                   x={labelW + x(totalFila(f)) + 7} y={y + rowH / 2}
-                  dominantBaseline="central" fontSize={9.5} fontWeight={600} fill="#56657C"
+                  dominantBaseline="central" fontSize={9.5} fontWeight={600} fill="#555555"
                 >
                   {fmt(totalFila(f))}
                 </text>

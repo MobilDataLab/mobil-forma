@@ -64,6 +64,15 @@ export function exportarSvgPng(
   img.src = src;
 }
 
+// Base64 (xlsx generado por openpyxl en Pyodide) → archivo .xlsx descargable.
+export function descargarXlsxBase64(b64: string, base: string): void {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  descargarBlob(blob, nombreArchivo(base, "xlsx"));
+}
+
 // Filas → CSV descargable.
 export function exportarCsv(
   base: string,

@@ -42,11 +42,16 @@ export default function GraficoVenta({ venta }: { venta: Venta }) {
     const [ox2, oy2] = punto(cx, cy, r, fin);
     const [ix2, iy2] = punto(cx, cy, rI, fin);
     const [ix1, iy1] = punto(cx, cy, rI, ini);
-    // Anillo (dona). Caso 100%: dos medios arcos para cerrar el aro completo.
+    // Anillo (dona). Caso 100%: aro completo = círculo exterior + interior
+    // (cada uno con dos semiarcos), restando el agujero con fill-rule evenodd.
     const d =
       it.pct >= 0.9999
-        ? `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z ` +
-          `M ${cx} ${cy - rI} A ${rI} ${rI} 0 1 0 ${cx - 0.01} ${cy - rI} Z`
+        ? `M ${cx} ${cy - r} ` +
+          `A ${r} ${r} 0 1 1 ${cx} ${cy + r} ` +
+          `A ${r} ${r} 0 1 1 ${cx} ${cy - r} Z ` +
+          `M ${cx} ${cy - rI} ` +
+          `A ${rI} ${rI} 0 1 0 ${cx} ${cy + rI} ` +
+          `A ${rI} ${rI} 0 1 0 ${cx} ${cy - rI} Z`
         : `M ${ox1} ${oy1} A ${r} ${r} 0 ${grande} 1 ${ox2} ${oy2} ` +
           `L ${ix2} ${iy2} A ${rI} ${rI} 0 ${grande} 0 ${ix1} ${iy1} Z`;
     // Posición de la etiqueta de % (en el centro del anillo)
@@ -80,11 +85,12 @@ export default function GraficoVenta({ venta }: { venta: Venta }) {
             </path>
           ))}
           {/* Total al centro de la dona */}
-          <text x={cx} y={cy - 7} textAnchor="middle" fontSize={20} fontWeight={700} fill="#1F3864">
+          <text x={cx} y={cy - 7} textAnchor="middle" fontSize={22} fontWeight={700} fill="#011D41"
+            fontFamily="var(--hd)">
             {fmt(total)}
           </text>
-          <text x={cx} y={cy + 12} textAnchor="middle" fontSize={10} fontWeight={600} fill="#8A97AB"
-            letterSpacing="0.06em">
+          <text x={cx} y={cy + 12} textAnchor="middle" fontSize={9} fontWeight={700} fill="#A3A3A3"
+            fontFamily="var(--hd)" letterSpacing="0.1em">
             M² VENTA
           </text>
           {/* Etiquetas de % dentro de los segmentos grandes (≥6%) */}

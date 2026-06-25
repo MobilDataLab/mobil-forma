@@ -30,6 +30,9 @@ export type Ediciones = {
   nivel: Record<string, number>;
   excluir: string[];
   agregar: { id: string; funcion: string; gfa: number; nivel: number | null; type: string }[];
+  // Subterráneos por edificio (id_hash → nº) y nombres legibles (id_hash → nombre).
+  subterraneos?: Record<string, number>;
+  nombres_edificio?: Record<string, string>;
 };
 
 export const edicionesVacias = (): Ediciones => ({
@@ -38,6 +41,8 @@ export const edicionesVacias = (): Ediciones => ({
   nivel: {},
   excluir: [],
   agregar: [],
+  subterraneos: {},
+  nombres_edificio: {},
 });
 
 export default function TablaElementos({

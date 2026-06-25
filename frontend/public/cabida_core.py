@@ -157,6 +157,29 @@ def extraer_edificio(s):
         return parts[1]
     return None
 
+def sort_etq(e):
+    """Orden de pisos: ST altos primero (más profundo), luego N1→N alto."""
+    e = str(e)
+    if e.startswith('ST-'):
+        try: return -1000 + int(e[3:])
+        except: return -999
+    elif e.startswith('N'):
+        try: return int(e[1:])
+        except: return 9999
+    return 9998
+
+def sort_etq_tabla(e):
+    """Orden para la TABLA: pisos altos arriba (N alto→N1), subterráneos abajo
+    desde el menos profundo (ST-1, ST-2, …). N6,N5,…,N1, ST-1, ST-2."""
+    e = str(e)
+    if e.startswith('N'):
+        try: return -int(e[1:])      # N6→-6 … N1→-1 (N alto primero)
+        except: return -0.5
+    elif e.startswith('ST-'):
+        try: return 1000 + int(e[3:])  # ST-1→1001, ST-2→1002 (al fondo, en orden)
+        except: return 1999
+    return 500  # S/N entre medio
+
 def es_departamento(tipo):
     """True si el elemento es una unidad habitacional (departamento), según la
     columna Tipo que exporta Forma. Robusto a acentos/mayúsculas/espacios."""
@@ -209,11 +232,23 @@ def _construir_df(csv_text: str, n_sub: int, ediciones=None):
     if ediciones.get('n_sub') is not None:
         n_sub = int(ediciones['n_sub'])
 
-    def etiqueta_fn(x):
+    # Subterráneos por edificio (opcional). Mapa {id_edificio: n_sub_edificio}.
+    # Si falta o un edificio no está en el mapa, se usa el n_sub global (compat).
+    sub_por_ed = ediciones.get('subterraneos') or {}
+    sub_por_ed = {str(k): int(v) for k, v in sub_por_ed.items()}
+
+    def n_sub_de(ed):
+        """Subterráneos del edificio dado; cae al global si no está mapeado."""
+        if ed is not None and str(ed) in sub_por_ed:
+            return sub_por_ed[str(ed)]
+        return n_sub
+
+    def etiqueta_fn(x, ed=None):
         if x is None or (isinstance(x, float) and pd.isna(x)): return 'S/N'
         x = int(x)
-        if x < n_sub: return f'ST-{n_sub - x}'
-        return f'N{x - n_sub + 1}'
+        ns = n_sub_de(ed)
+        if x < ns: return f'ST-{ns - x}'
+        return f'N{x - ns + 1}'
 
     df = _leer_csv(csv_text)
     if 'Id' not in df.columns:   df['Id'] = ['row-%d' % i for i in range(len(df))]
@@ -253,6 +288,8 @@ def _construir_df(csv_text: str, n_sub: int, ediciones=None):
                 'Function': a.get('funcion', 'Otro'),
                 'GFA': float(a.get('gfa', 0) or 0),
                 'nivel_raw': (int(nv) if nv is not None and str(nv) != '' else None),
+                # Edificio destino (para subterráneos correctos y agrupación por edificio).
+                'Edificio': (str(a['edificio']) if a.get('edificio') else None),
             })
         if nuevas:
             df = pd.concat([df, pd.DataFrame(nuevas)], ignore_index=True)
@@ -262,7 +299,16 @@ def _construir_df(csv_text: str, n_sub: int, ediciones=None):
         df = df[~df['Id'].isin(excluir)].reset_index(drop=True)
 
     # ── Derivar el resto ──
-    df['Etiqueta'] = df['nivel_raw'].apply(etiqueta_fn)
+    # La etiqueta de piso depende del edificio (subterráneos por edificio).
+    df['Etiqueta'] = df.apply(
+        lambda r: etiqueta_fn(r['nivel_raw'], r.get('Edificio')), axis=1)
+    # Nombre legible del edificio (default "Edificio N" por orden de aparición).
+    nombres_ed = {str(k): str(v) for k, v in (ediciones.get('nombres_edificio') or {}).items()}
+    if nombres_ed:
+        df['EdificioNombre'] = df['Edificio'].apply(
+            lambda e: nombres_ed.get(str(e), e if e is not None else 'Sin edificio'))
+    else:
+        df['EdificioNombre'] = df['Edificio']
     df['Canonico'] = df['Function'].apply(canon)
     df['FV']       = df['Canonico'].map(FACTOR_VENTA).fillna(0)
     df['SV']       = df['GFA'] * df['FV']
@@ -324,11 +370,63 @@ def venta_por_funcion(csv_text: str, n_sub: int, ediciones=None) -> dict:
 
 
 def gfa_estacionamientos(csv_text: str, n_sub: int, ediciones=None) -> dict:
-    """GFA total de la función Estacionamientos (respeta ediciones)."""
+    """GFA de Estacionamientos, separado en superficie (sobre NTN) y subterráneo.
+
+    Devuelve el total (compat) y el desglose por nivel (N-x = superficie, ST-x = subterráneo).
+    """
     df, n_sub = _construir_df(csv_text, n_sub, ediciones)
-    g = float(df[df['Canonico'] == 'Estacionamientos']['GFA'].sum())
-    n = int((df['Canonico'] == 'Estacionamientos').sum())
-    return {'gfa': round(g, 2), 'n_elementos': n}
+    est = df[df['Canonico'] == 'Estacionamientos']
+    sub_mask = est['Etiqueta'].astype(str).str.startswith('ST-')
+    gfa_subt = float(est[sub_mask]['GFA'].sum())
+    n_subt = int(sub_mask.sum())
+    gfa_sup = float(est[~sub_mask]['GFA'].sum())
+    n_sup = int((~sub_mask).sum())
+    return {
+        'gfa': round(gfa_sup + gfa_subt, 2),
+        'n_elementos': int(len(est)),
+        'superficie': {'gfa': round(gfa_sup, 2), 'n_elementos': n_sup},
+        'subterraneo': {'gfa': round(gfa_subt, 2), 'n_elementos': n_subt},
+    }
+
+
+def inspeccionar_csv(csv_text: str) -> dict:
+    """Inspección rápida del CSV SIN calcular cabida (para el asistente de carga).
+
+    Devuelve los edificios en orden de aparición, con los niveles crudos detectados
+    (los del Id, sin aplicar subterráneos) y el conteo de elementos. Alimenta la UI
+    que pide nombrar edificios y fijar sus subterráneos antes de calcular.
+    """
+    df = _leer_csv(csv_text)
+    if 'Id' not in df.columns:
+        df['Id'] = ['row-%d' % i for i in range(len(df))]
+    df['Id'] = df['Id'].astype(str)
+    df['Edificio'] = df['Id'].apply(extraer_edificio)
+    df['nivel_raw'] = df['Id'].apply(extraer_nivel)
+
+    edificios = []
+    vistos = []
+    for ed in df['Edificio'].tolist():
+        clave = 'Sin edificio' if ed is None else str(ed)
+        if clave not in vistos:
+            vistos.append(clave)
+    for i, clave in enumerate(vistos, 1):
+        if clave == 'Sin edificio':
+            sub = df[df['Edificio'].isna()]
+        else:
+            sub = df[df['Edificio'] == clave]
+        niveles = sorted({int(n) for n in sub['nivel_raw'].tolist()
+                          if n is not None and not (isinstance(n, float) and pd.isna(n))})
+        edificios.append({
+            'id':            clave,
+            'nombre_default': clave if clave == 'Sin edificio' else f'Edificio {i}',
+            'pisos_raw':     niveles,
+            'n_pisos':       len(niveles),
+            'n_elementos':   int(len(sub)),
+        })
+    return {
+        'n_edificios': len([e for e in edificios if e['id'] != 'Sin edificio']),
+        'edificios':   edificios,
+    }
 
 
 def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
@@ -352,6 +450,11 @@ def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
     if 'Sin edificio' in gfa_por_ed.index:
         orden_ed.append('Sin edificio')
 
+    # Mapa hash → nombre legible (lo trae _construir_df en EdificioNombre).
+    nombre_de = {}
+    for h, nm in zip(df['Edificio'], df['EdificioNombre']):
+        nombre_de.setdefault(str(h), str(nm))
+
     edificios = []
     for ed in orden_ed:
         sub = df[df['Edificio'] == ed]
@@ -371,15 +474,22 @@ def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
                 'pct':      round(g / total_gfa, 4) if total_gfa > 0 else 0.0,
                 'color':    '#' + COLOR_CANONICO.get(fn, 'BFBFBF'),
             })
+        construido = float(sub[sub['Integra']]['GFA'].sum())
+        venta = float(sub['SV'].sum())
         edificios.append({
-            'edificio':     str(ed),
+            'edificio':     nombre_de.get(str(ed), str(ed)),
+            'edificio_id':  str(ed),
             'departamentos': int(sub['_depto'].sum()),
             'unidades':     int(len(sub)),            # total de elementos
             'gfa':          round(total_gfa, 2),
-            'venta':        round(float(sub['SV'].sum()), 2),
+            'construido':   round(construido, 2),
+            'venta':        round(venta, 2),
+            'eficiencia':   round(venta / construido, 4) if construido > 0 else 0.0,
             'funciones':    funcs,
         })
 
+    tot_constr = float(df[df['Integra']]['GFA'].sum())
+    tot_venta = float(df['SV'].sum())
     return {
         'n_edificios': len(orden_ed),
         'funciones':   funciones_proyecto,
@@ -388,7 +498,9 @@ def cabida_por_edificio(csv_text: str, n_sub: int, ediciones=None) -> dict:
             'departamentos': int(df['_depto'].sum()),
             'unidades': int(len(df)),
             'gfa':      round(float(df['GFA'].sum()), 2),
-            'venta':    round(float(df['SV'].sum()), 2),
+            'construido': round(tot_constr, 2),
+            'venta':    round(tot_venta, 2),
+            'eficiencia': round(tot_venta / tot_constr, 4) if tot_constr > 0 else 0.0,
         },
     }
 
@@ -406,6 +518,56 @@ def paleta_canonica() -> list:
             'rgb_str': f'rgb({r}, {g}, {b})',
         })
     return out
+
+
+def paleta_xlsx() -> str:
+    """Excel «tipo Mobil» de la paleta canónica: Función · Color · RGB.
+
+    Cada fila lleva una celda rellena con el color real de la función. Devuelve
+    el .xlsx codificado en base64 (mismo puente que generar_cabida).
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Paleta'
+    ws.sheet_view.showGridLines = False
+
+    # Título (banda Mobil)
+    ws.merge_cells('A1:C1')
+    c = ws.cell(1, 1, 'PALETA DE FUNCIONES CANÓNICAS')
+    c.fill = fill(C_HDR_BG); c.font = fnt(True, 13, C_HDR_FT); c.alignment = aln('center')
+    ws.row_dimensions[1].height = 28
+
+    # Encabezados
+    for i, h in enumerate(['Función canónica', 'Color', 'RGB'], 1):
+        hdr(ws, 2, i, h, ha='left' if i != 2 else 'center')
+    ws.row_dimensions[2].height = 20
+
+    ws.column_dimensions['A'].width = 24
+    ws.column_dimensions['B'].width = 14
+    ws.column_dimensions['C'].width = 20
+
+    # Filas
+    for idx, p in enumerate(paleta_canonica(), 3):
+        h = p['hex'].lstrip('#')
+        r, g, b = p['rgb']
+        bg = C_ROW_ODD if idx % 2 == 0 else C_ROW_EVEN
+
+        ca = ws.cell(idx, 1, p['funcion'])
+        ca.fill = fill(bg); ca.font = fnt(False, 10, '1A1A1A')
+        ca.alignment = aln('left'); ca.border = brd()
+
+        # Celda de color: relleno = color de la función
+        cb = ws.cell(idx, 2, '')
+        cb.fill = fill(h); cb.border = brd()
+
+        cc = ws.cell(idx, 3, f'{r}, {g}, {b}')
+        cc.fill = fill(bg); cc.font = fnt(False, 10, '555555', name='Consolas')
+        cc.alignment = aln('left'); cc.border = brd()
+        ws.row_dimensions[idx].height = 22
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return base64.b64encode(buf.getvalue()).decode('ascii')
 
 
 def fill(c):  return PatternFill('solid', fgColor=c)
@@ -881,6 +1043,11 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
     # Agrupar por edificio (los sin edificio van al final)
     df_e = df.assign(Edificio=df['Edificio'].fillna('Sin edificio'),
                      _depto=df['Type'].apply(es_departamento))
+    # Mapa hash → nombre legible (default = el propio hash si no se renombró).
+    nombre_de = {}
+    if 'EdificioNombre' in df.columns:
+        for h, nm in zip(df_e['Edificio'], df['EdificioNombre'].fillna('Sin edificio')):
+            nombre_de.setdefault(str(h), str(nm))
     gfa_por_ed = df_e.groupby('Edificio')['GFA'].sum().sort_values(ascending=False)
     orden_ed = [e for e in gfa_por_ed.index if e != 'Sin edificio']
     if 'Sin edificio' in gfa_por_ed.index:
@@ -893,10 +1060,11 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
         tot_uni = int(len(sub))
         tot_dep = int(sub['_depto'].sum())
         tot_sv  = float(sub['SV'].sum())
+        ed_nombre = nombre_de.get(str(ed), str(ed))
 
         # Banda con el nombre del edificio + resumen
         ws_e.merge_cells(f'A{r}:{get_column_letter(LAST_E)}{r}')
-        cell=ws_e.cell(r,1,f'EDIFICIO  {ed}    ·    {tot_dep} departamentos    ·    {tot_gfa:,.0f} m²')
+        cell=ws_e.cell(r,1,f'{ed_nombre}    ·    {tot_dep} departamentos    ·    {tot_gfa:,.0f} m²')
         cell.fill=fill(C_HDR_BG); cell.font=fnt(True,11,C_HDR_FT); cell.alignment=aln('left')
         ws_e.row_dimensions[r].height=22
         r+=1
@@ -948,10 +1116,178 @@ def generar_cabida(csv_text: str, n_sub: int, ediciones=None) -> str:
     ws_e.row_dimensions[r].height=20
     ws_e.freeze_panes='A2'
 
+    # ═══════════════════════════════════════════════════════
+    # HOJA 6 — SUPERFICIES x PISO (por edificio: construido + vendible)
+    # ═══════════════════════════════════════════════════════
+    _hoja_superficies(wb, df)
+
     # ── Serializar a base64 ───────────────────────────────
     buf = io.BytesIO()
     wb.save(buf)
     return base64.b64encode(buf.getvalue()).decode('ascii')
+
+
+def superficies_xlsx(csv_text: str, n_sub: int, ediciones=None, extra=None) -> str:
+    """Excel «tipo Mobil»: Superficies x Piso + (opcional) Normativa y Estacionamientos.
+
+    `extra` (dict, opcional, lo arma el front con lo que el usuario ve en pantalla):
+      { "normas": {...}, "estac": {...} }
+    Devuelve base64 del .xlsx.
+    """
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    extra = extra or {}
+    wb = Workbook()
+    wb.remove(wb.active)  # quitar la hoja vacía por defecto
+    _hoja_superficies(wb, df)
+    if extra.get('normas'):
+        _hoja_normativa(wb, extra['normas'])
+    if extra.get('estac'):
+        _hoja_estacionamientos(wb, extra['estac'])
+    if not wb.sheetnames:  # sin nada → hoja mínima para no fallar
+        ws = wb.create_sheet('Superficies x Piso')
+        ws.cell(1, 1, 'Sin datos de superficies.')
+    buf = io.BytesIO()
+    wb.save(buf)
+    return base64.b64encode(buf.getvalue()).decode('ascii')
+
+
+def _hoja_normativa(wb, data):
+    """Hoja 'Normativa': parámetros × columnas (zonas/fusión/propuesto), tal como en pantalla.
+    data = { 'columnas': [{id,nombre}], 'filas': [{label, valores:{colId: str}}] }"""
+    cols = data.get('columnas') or []
+    filas = data.get('filas') or []
+    if not cols or not filas:
+        return
+    ws = wb.create_sheet('Normativa')
+    ws.sheet_view.showGridLines = False
+    LAST = 1 + len(cols)
+    ws.merge_cells(f'A1:{get_column_letter(LAST)}1')
+    c = ws.cell(1, 1, 'NORMAS URBANÍSTICAS')
+    c.fill = fill(C_HDR_BG); c.font = fnt(True, 13, C_HDR_FT); c.alignment = aln('center')
+    ws.row_dimensions[1].height = 28
+    ws.column_dimensions['A'].width = 30
+    hdr(ws, 2, 1, 'Parámetro', ha='left')
+    for i, col in enumerate(cols, 2):
+        hdr(ws, 2, i, str(col.get('nombre', '')))
+        ws.column_dimensions[get_column_letter(i)].width = 18
+    r = 3
+    for f in filas:
+        if f.get('grupo'):
+            ws.merge_cells(f'A{r}:{get_column_letter(LAST)}{r}')
+            cc = ws.cell(r, 1, str(f.get('label', '')))
+            cc.fill = fill(C_TOTAL_BG); cc.font = fnt(True, 10, C_TOTAL_FT); cc.alignment = aln('left')
+            r += 1
+            continue
+        ca = ws.cell(r, 1, str(f.get('label', ''))); ca.font = fnt(False, 10); ca.alignment = aln('left'); ca.border = brd()
+        vals = f.get('valores') or {}
+        for i, col in enumerate(cols, 2):
+            v = vals.get(col.get('id'), '')
+            cc = ws.cell(r, i, v if v != '' else None)
+            cc.font = fnt(False, 10); cc.alignment = aln('right'); cc.border = brd()
+        r += 1
+
+
+def _hoja_estacionamientos(wb, data):
+    """Hoja 'Estacionamientos': Superficie y Subterráneo con m²/cajones/ratio/holgura.
+    data = { 'bloques': [{titulo, gfa, cajones, ratio}] }"""
+    bloques = data.get('bloques') or []
+    if not bloques:
+        return
+    ws = wb.create_sheet('Estacionamientos')
+    ws.sheet_view.showGridLines = False
+    ws.merge_cells('A1:E1')
+    c = ws.cell(1, 1, 'ESTACIONAMIENTOS — RATIO POR CAJÓN')
+    c.fill = fill(C_HDR_BG); c.font = fnt(True, 13, C_HDR_FT); c.alignment = aln('center')
+    ws.row_dimensions[1].height = 28
+    ws.column_dimensions['A'].width = 24
+    for col in 'BCDE':
+        ws.column_dimensions[col].width = 16
+    for i, h in enumerate(['Nivel', 'Superficie m²', 'Cajones', 'm²/cajón', 'Holgura'], 1):
+        hdr(ws, 2, i, h, ha='left' if i == 1 else 'center')
+    r = 3
+    for b in bloques:
+        gfa = float(b.get('gfa') or 0)
+        caj = float(b.get('cajones') or 0)
+        ratio = (gfa / caj) if caj > 0 else float(b.get('ratio') or 0)
+        holg = 'Amplia' if ratio >= 30 else ('Justa' if ratio >= 25 else ('Ajustada' if ratio > 0 else '—'))
+        ws.cell(r, 1, str(b.get('titulo', ''))).font = fnt(True, 10)
+        cc = ws.cell(r, 2, round(gfa, 2) if gfa else None); cc.number_format = '#,##0.00'; cc.alignment = aln('right')
+        cc = ws.cell(r, 3, int(caj) if caj else None); cc.number_format = '0'; cc.alignment = aln('center')
+        cc = ws.cell(r, 4, round(ratio, 1) if ratio else None); cc.number_format = '0.0'; cc.alignment = aln('center')
+        ws.cell(r, 5, holg).alignment = aln('center')
+        r += 1
+
+
+def _hoja_superficies(wb, df):
+    """Hoja 'Superficies x Piso': una sección por edificio (+ Total proyecto),
+    piso × función con totales bajo/sobre NTN, Construido y Vendible + ratio."""
+    df = df.copy()
+    df['Edificio'] = df['Edificio'].fillna('Sin edificio')
+    funciones = [f for f in ORDEN_FUNC if f in df['Canonico'].unique()]
+    if not funciones:
+        return
+    nombre_de = {}
+    for h, nm in zip(df['Edificio'], df.get('EdificioNombre', df['Edificio'])):
+        nombre_de.setdefault(str(h), str(nm))
+
+    gfa_por_ed = df.groupby('Edificio')['GFA'].sum().sort_values(ascending=False)
+    orden_ed = [e for e in gfa_por_ed.index if e != 'Sin edificio']
+    if 'Sin edificio' in gfa_por_ed.index:
+        orden_ed.append('Sin edificio')
+
+    ws = wb.create_sheet('Superficies x Piso')
+    LAST = 1 + len(funciones) + 2   # Piso + funciones + Construido + Vendible
+    ws.merge_cells(f'A1:{get_column_letter(LAST)}1')
+    c = ws.cell(1, 1, 'SUPERFICIES POR PISO — CONSTRUIDO Y VENDIBLE x EDIFICIO')
+    c.fill = fill(C_HDR_BG); c.font = fnt(True, 13, C_HDR_FT); c.alignment = aln('center')
+    ws.row_dimensions[1].height = 28
+    ws.column_dimensions['A'].width = 16
+    for i in range(2, LAST + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 13
+
+    def bloque(sub, r, titulo):
+        ws.merge_cells(f'A{r}:{get_column_letter(LAST)}{r}')
+        cab = ws.cell(r, 1, titulo)
+        cab.fill = fill(C_TOTAL_BG); cab.font = fnt(True, 11, C_TOTAL_FT); cab.alignment = aln('left')
+        r += 1
+        hdr(ws, r, 1, 'Piso', ha='left')
+        for i, fn in enumerate(funciones, 2):
+            hdr(ws, r, i, fn, wrap=True)
+        hdr(ws, r, len(funciones) + 2, 'Construido')
+        hdr(ws, r, len(funciones) + 3, 'Vendible')
+        r += 1
+
+        etqs = sorted(sub['Etiqueta'].unique().tolist(), key=sort_etq)
+        piv = sub.pivot_table(index='Etiqueta', columns='Canonico', values='GFA',
+                              aggfunc='sum', fill_value=0)
+        for etq in etqs:
+            f_sub = sub[sub['Etiqueta'] == etq]
+            ws.cell(r, 1, etq).font = fnt(True, 10)
+            for i, fn in enumerate(funciones, 2):
+                v = float(piv.loc[etq, fn]) if (etq in piv.index and fn in piv.columns) else 0.0
+                cc = ws.cell(r, i, round(v, 2) if v else None); cc.number_format = '#,##0.00'; cc.alignment = aln('right')
+            cc = ws.cell(r, len(funciones) + 2, round(float(f_sub[f_sub['Integra']]['GFA'].sum()), 2)); cc.number_format = '#,##0.00'
+            cc = ws.cell(r, len(funciones) + 3, round(float(f_sub['SV'].sum()), 2)); cc.number_format = '#,##0.00'
+            r += 1
+
+        tg = float(sub[sub['Integra']]['GFA'].sum())
+        tv = float(sub['SV'].sum())
+        tot(ws, r, 1, 'TOTAL', ha='left')
+        for i, fn in enumerate(funciones, 2):
+            v = float(sub[sub['Canonico'] == fn]['GFA'].sum())
+            tot(ws, r, i, round(v, 2) if v else None, '#,##0.00')
+        tot(ws, r, len(funciones) + 2, round(tg, 2), '#,##0.00')
+        tot(ws, r, len(funciones) + 3, round(tv, 2), '#,##0.00')
+        r += 1
+        ratio = (tv / tg) if tg > 0 else 0.0
+        rc = ws.cell(r, len(funciones) + 2, 'Vendible/Construido'); rc.font = fnt(False, 9, '555555'); rc.alignment = aln('right')
+        rc = ws.cell(r, len(funciones) + 3, round(ratio, 4)); rc.number_format = '0.0%'; rc.font = fnt(True, 10)
+        return r + 2
+
+    r = 2
+    r = bloque(df, r, 'TOTAL PROYECTO')
+    for ed in orden_ed:
+        r = bloque(df[df['Edificio'] == ed], r, nombre_de.get(str(ed), str(ed)))
 
 
 # Matriz piso × función para graficar en la UI (barras horizontales apiladas)
@@ -985,6 +1321,156 @@ def matriz_cabida(csv_text: str, n_sub: int, ediciones=None) -> dict:
         'funciones': funciones,
         'colores': {fn: '#' + COLOR_CANONICO.get(fn, 'BFBFBF') for fn in funciones},
         'datos': datos,
+    }
+
+
+# Cuadro de superficies: edificio × piso × función, con Construido y Vendible.
+# Reemplaza/complementa la matriz: entrega la tabla "tipo Mobil" + datos del gráfico.
+def cabida_superficies(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    """Superficies por edificio × piso × función (GFA construido + SV vendible).
+
+    Devuelve, por cada edificio y por el TOTAL del proyecto (agregando por etiqueta):
+      - pisos: filas con celdas por función, construido (GFA que integra) y vendible (SV).
+      - subtotales bajo/sobre NTN, total y ratio vendible/construido.
+    Reutiliza FACTOR_VENTA/CONSTRUIDO/GRUPOS/ORDEN_FUNC; no inventa superficies.
+    """
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    df = df.copy()
+    df['Edificio'] = df['Edificio'].fillna('Sin edificio')
+
+    # Funciones presentes, en orden canónico.
+    funciones = [f for f in ORDEN_FUNC if f in df['Canonico'].unique()]
+
+    # Estructura de columnas agrupadas (para la tabla). Orden de grupos del cuadro Mobil.
+    ORDEN_GRUPOS = ['Otros usos', 'Residencial', 'Comercial', 'Oficinas']
+    ETIQUETA_GRUPO = {
+        'Otros usos': 'Estacionamientos', 'Residencial': 'Residencial',
+        'Comercial': 'Eq. Comercio', 'Oficinas': 'Eq. Oficinas',
+    }
+    grupos_cols = []
+    for g in ORDEN_GRUPOS:
+        fns = [f for f in GRUPOS.get(g, []) if f in funciones]
+        if not fns:
+            continue
+        grupos_cols.append({
+            'grupo': ETIQUETA_GRUPO.get(g, g),
+            'funciones': fns,
+            'colores': {f: '#' + COLOR_CANONICO.get(f, 'BFBFBF') for f in fns},
+        })
+
+    # Mapa hash → nombre legible (lo trae _construir_df).
+    nombre_de = {}
+    for h, nm in zip(df['Edificio'], df['EdificioNombre']):
+        nombre_de.setdefault(str(h), str(nm))
+
+    # Orden de edificios por GFA (mayor a menor), 'Sin edificio' al final.
+    gfa_por_ed = df.groupby('Edificio')['GFA'].sum().sort_values(ascending=False)
+    orden_ed = [e for e in gfa_por_ed.index if e != 'Sin edificio']
+    if 'Sin edificio' in gfa_por_ed.index:
+        orden_ed.append('Sin edificio')
+
+    def construir_bloque(sub):
+        """Bloque {pisos, subtotal_bajo, subtotal_sobre, total, ratio} para un df.
+        Orden de la tabla: pisos altos arriba (N alto → N1) y subterráneos abajo
+        empezando por el menos profundo (ST-1, ST-2, …)."""
+        etiquetas = sorted(sub['Etiqueta'].unique().tolist(), key=sort_etq_tabla)
+        piv_gfa = sub.pivot_table(index='Etiqueta', columns='Canonico',
+                                  values='GFA', aggfunc='sum', fill_value=0)
+        # Aporte manual (áreas agregadas) por celda, para distinguirlo del CSV.
+        es_manual = sub['Id'].astype(str).str.startswith('manual')
+        sub_man = sub[es_manual]
+        piv_man = (sub_man.pivot_table(index='Etiqueta', columns='Canonico',
+                                       values='GFA', aggfunc='sum', fill_value=0)
+                   if len(sub_man) else None)
+        pisos = []
+        for etq in etiquetas:
+            celdas = {}
+            celdas_manual = {}
+            for fn in funciones:
+                v = float(piv_gfa.loc[etq, fn]) if (etq in piv_gfa.index and fn in piv_gfa.columns) else 0.0
+                celdas[fn] = round(v, 2)
+                m = (float(piv_man.loc[etq, fn]) if (piv_man is not None and etq in piv_man.index
+                                                     and fn in piv_man.columns) else 0.0)
+                if m:
+                    celdas_manual[fn] = round(m, 2)
+            f_sub = sub[sub['Etiqueta'] == etq]
+            construido = float(f_sub[f_sub['Integra']]['GFA'].sum())
+            vendible = float(f_sub['SV'].sum())
+            pisos.append({
+                'etiqueta': etq,
+                'es_sub': etq.startswith('ST-'),
+                'celdas': celdas,
+                'celdas_manual': celdas_manual,
+                'construido': round(construido, 2),
+                'vendible': round(vendible, 2),
+                'total': round(float(f_sub['GFA'].sum()), 2),
+            })
+
+        def agregar(filas):
+            celdas = {fn: round(sum(p['celdas'][fn] for p in filas), 2) for fn in funciones}
+            return {
+                'celdas': celdas,
+                'construido': round(sum(p['construido'] for p in filas), 2),
+                'vendible': round(sum(p['vendible'] for p in filas), 2),
+                'total': round(sum(p['total'] for p in filas), 2),
+            }
+
+        bajo = [p for p in pisos if p['es_sub']]
+        sobre = [p for p in pisos if not p['es_sub']]
+        total = agregar(pisos)
+        ratio = (total['vendible'] / total['construido']) if total['construido'] > 0 else 0.0
+        return {
+            'pisos': pisos,
+            'subtotal_bajo': agregar(bajo) if bajo else None,
+            'subtotal_sobre': agregar(sobre) if sobre else None,
+            'total': total,
+            'ratio': round(ratio, 4),
+        }
+
+    por_edificio = {}
+    lista_eds = []
+    for ed in orden_ed:
+        por_edificio[str(ed)] = construir_bloque(df[df['Edificio'] == ed])
+        lista_eds.append({'id': str(ed), 'nombre': nombre_de.get(str(ed), str(ed))})
+    # Total proyecto (agrega por etiqueta, no por edificio).
+    por_edificio['__total__'] = construir_bloque(df)
+
+    return {
+        'edificios': lista_eds,           # para el selector (+ "Total" en el front)
+        'funciones': funciones,
+        'colores': {fn: '#' + COLOR_CANONICO.get(fn, 'BFBFBF') for fn in funciones},
+        'grupos': grupos_cols,            # estructura de columnas Útil/Común por grupo
+        'por_edificio': por_edificio,
+    }
+
+
+def metricas_normativas(csv_text: str, n_sub: int, ediciones=None) -> dict:
+    """Métricas de la cabida que alimentan la tabla de Normas Urbanísticas.
+
+    - constructibilidad: Σ SOBRE NTN de Residencial Útil + Comercio (GFA) + Oficinas (GFA).
+    - ocupacion_p1: GFA total del piso N1.
+    - viviendas: nº de departamentos (unidades habitacionales).
+    """
+    df, n_sub = _construir_df(csv_text, n_sub, ediciones)
+    sobre = df[~df['Etiqueta'].astype(str).str.startswith('ST-')]
+
+    res_util = float(sobre[sobre['Canonico'] == 'Residencial Util']['GFA'].sum())
+    comercio = float(sobre[sobre['Canonico'].isin(['Comercial Util', 'Comercial Comun'])]['GFA'].sum())
+    oficinas = float(sobre[sobre['Canonico'].isin(['Oficinas Util', 'Oficinas Comun'])]['GFA'].sum())
+    constructibilidad = res_util + comercio + oficinas
+
+    ocupacion_p1 = float(df[df['Etiqueta'] == 'N1']['GFA'].sum())
+    viviendas = int(df['Type'].apply(es_departamento).sum())
+
+    return {
+        'constructibilidad': round(constructibilidad, 2),
+        'ocupacion_p1': round(ocupacion_p1, 2),
+        'viviendas': viviendas,
+        'desglose': {
+            'residencial_util': round(res_util, 2),
+            'comercio_gfa': round(comercio, 2),
+            'oficinas_gfa': round(oficinas, 2),
+        },
     }
 
 

@@ -5,7 +5,7 @@ interface Props {
   color?: string;
 }
 
-export function MobilMark({ size = 28, color = "#fff" }: Props) {
+export function MobilMark({ size = 28, color = "#006BFF" }: Props) {
   return (
     <svg viewBox="0 0 960 840" width={size} height={size} aria-hidden="true">
       <g
