@@ -1151,23 +1151,47 @@ def superficies_xlsx(csv_text: str, n_sub: int, ediciones=None, extra=None) -> s
     return base64.b64encode(buf.getvalue()).decode('ascii')
 
 
+def normativa_xlsx(normas_data) -> str:
+    """Excel «tipo Mobil» SÓLO con la hoja Normativa.
+
+    `normas_data` = payload que arma el front (normasParaExcel):
+      { "columnas": [{id,nombre}], "filas": [{label, grupo?, valores}] }
+    No requiere CSV: funciona con los inputs/teaser que el usuario ve en pantalla.
+    Devuelve base64 del .xlsx.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    if normas_data and (normas_data.get('filas')):
+        _hoja_normativa(wb, normas_data)
+    if not wb.sheetnames:
+        ws = wb.create_sheet('Normativa')
+        ws.cell(1, 1, 'Sin datos de normativa.')
+    buf = io.BytesIO()
+    wb.save(buf)
+    return base64.b64encode(buf.getvalue()).decode('ascii')
+
+
 def _hoja_normativa(wb, data):
-    """Hoja 'Normativa': parámetros × columnas (zonas/fusión/propuesto), tal como en pantalla.
-    data = { 'columnas': [{id,nombre}], 'filas': [{label, valores:{colId: str}}] }"""
+    """Hoja 'Normativa': parámetros × Fórmula × columnas (zonas/fusión/propuesto).
+    data = { 'columnas': [{id,nombre}], 'filas': [{label, formula?, grupo?, valores:{colId: str}}] }
+    Layout: A=Parámetro, B=Fórmula/factor, C…=columnas de datos."""
     cols = data.get('columnas') or []
     filas = data.get('filas') or []
     if not cols or not filas:
         return
     ws = wb.create_sheet('Normativa')
     ws.sheet_view.showGridLines = False
-    LAST = 1 + len(cols)
+    DATA0 = 3                       # primera columna de datos (tras Parámetro y Fórmula)
+    LAST = 2 + len(cols)
     ws.merge_cells(f'A1:{get_column_letter(LAST)}1')
     c = ws.cell(1, 1, 'NORMAS URBANÍSTICAS')
     c.fill = fill(C_HDR_BG); c.font = fnt(True, 13, C_HDR_FT); c.alignment = aln('center')
     ws.row_dimensions[1].height = 28
     ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 30
     hdr(ws, 2, 1, 'Parámetro', ha='left')
-    for i, col in enumerate(cols, 2):
+    hdr(ws, 2, 2, 'Fórmula / factor', ha='left')
+    for i, col in enumerate(cols, DATA0):
         hdr(ws, 2, i, str(col.get('nombre', '')))
         ws.column_dimensions[get_column_letter(i)].width = 18
     r = 3
@@ -1179,8 +1203,10 @@ def _hoja_normativa(wb, data):
             r += 1
             continue
         ca = ws.cell(r, 1, str(f.get('label', ''))); ca.font = fnt(False, 10); ca.alignment = aln('left'); ca.border = brd()
+        cf = ws.cell(r, 2, str(f.get('formula', '') or '') or None)
+        cf.font = fnt(False, 9, '7A7A7A'); cf.alignment = aln('left'); cf.border = brd()
         vals = f.get('valores') or {}
-        for i, col in enumerate(cols, 2):
+        for i, col in enumerate(cols, DATA0):
             v = vals.get(col.get('id'), '')
             cc = ws.cell(r, i, v if v != '' else None)
             cc.font = fnt(False, 10); cc.alignment = aln('right'); cc.border = brd()
