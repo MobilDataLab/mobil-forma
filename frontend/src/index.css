@@ -710,12 +710,24 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .rnd-cond { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--gray-200); display: flex; flex-direction: column; gap: 18px; }
 .rnd-cond-cap { display: flex; flex-direction: column; gap: 12px; }
 .rnd-cap-tit { font: 700 11px var(--hd); letter-spacing: .07em; text-transform: uppercase; color: var(--gray-700); }
+.rnd-perfiles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rnd-perfil-btn { border: 1px solid var(--blue); border-radius: 4px; padding: 7px 14px; font: 700 11px var(--hd); letter-spacing: .04em; }
+.rnd-perfil-btn:hover { background: var(--blue-tint); }
+.rnd-perfil-hint { font: 400 11px var(--bd); color: var(--gray-500, #8a8a8a); font-style: italic; }
+.rnd-clima-inferido { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--blue-tint); border: 1px solid var(--blue); border-radius: 4px; }
+.rnd-clima-lbl { font: 700 10px var(--hd); letter-spacing: .06em; text-transform: uppercase; color: var(--gray-700); }
+.rnd-clima-val { font: 700 13px var(--bd); color: var(--blue-strong); }
+.rnd-clima-hint { font: 400 11px var(--bd); color: var(--gray-500, #8a8a8a); font-style: italic; }
+/* Texto libre de cualquier eje de la toma (opción "Personalizado…"). */
+.rnd-campo-libre { margin-top: 6px; width: 100%; padding: 7px 8px; border: 1px solid var(--blue); background: var(--blue-tint); font: 400 12px var(--bd); color: var(--ink); }
+.rnd-campo-libre:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .rnd-cond-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 .rnd-field { gap: 6px; }
 .rnd-field select { width: 100%; padding: 9px 10px; border: 1px solid var(--gray-200); border-radius: 0; background: #fff; font: 400 13px var(--bd); color: var(--ink); }
 .rnd-field select:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .rnd-json-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--gray-200); }
 .rnd-json { margin: 12px 0 0; background: var(--gray-50); border: 1px solid var(--gray-200); padding: 16px; font: 400 12px var(--ff-mono); color: var(--ink); white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow: auto; }
+.rnd-prompt { margin: 12px 0 0; background: var(--blue-tint); border: 1px solid var(--blue); border-left-width: 3px; padding: 16px; font: 400 13px var(--bd); line-height: 1.6; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 760px) { .rnd-drop-row { flex-direction: column; } .rnd-preview { width: 100%; } }
 
 /* Selector de materialidad por fila */
@@ -724,6 +736,39 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .rnd-mat-sel:hover:not(:disabled) { border-color: var(--blue); }
 .rnd-mat-sel:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .rnd-mat-sel:disabled { opacity: .5; }
+
+/* Usos: cabecera con botón de picker, materialidad libre, tag manual, quitar */
+.rnd-colores-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.rnd-mat-stack { display: flex; flex-direction: column; gap: 6px; }
+.rnd-mat-libre { width: 100%; padding: 7px 8px; border: 1px solid var(--blue); border-radius: 0; background: var(--blue-tint); font: 400 12px var(--bd); color: var(--ink); }
+.rnd-mat-libre:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+.rnd-mat-libre:disabled { opacity: .5; }
+.rnd-tag-man { margin-left: 8px; font: 700 9px var(--hd); letter-spacing: .05em; text-transform: uppercase; color: var(--blue-strong); background: var(--blue-tint); border: 1px solid var(--blue); border-radius: 3px; padding: 1px 5px; vertical-align: middle; }
+.rnd-quitar-cell { width: 56px; text-align: center; white-space: nowrap; }
+.rnd-mas { width: 22px; height: 22px; border: 1px solid var(--gray-200); border-radius: 3px; background: #fff; color: var(--gray-700); font-size: 14px; line-height: 1; cursor: pointer; }
+.rnd-mas:hover { border-color: var(--blue); color: var(--blue-strong); }
+/* Sub-fila de atributos del elemento (altura / distribución / rol). */
+.rnd-attr-row td { background: var(--blue-tint); padding: 12px 16px !important; }
+.rnd-attr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.rnd-attr-grid label { display: flex; flex-direction: column; gap: 4px; font: 700 10px var(--hd); letter-spacing: .05em; text-transform: uppercase; color: var(--gray-700); }
+.rnd-attr-grid input { padding: 7px 8px; border: 1px solid var(--gray-300, #cfcfcf); background: #fff; font: 400 12px var(--bd); color: var(--ink); }
+.rnd-attr-grid input:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+/* Modal del color picker */
+.rnd-modal-backdrop { position: fixed; inset: 0; background: rgba(1,29,65,.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 24px; }
+.rnd-modal { background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.35); width: min(960px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+.rnd-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--gray-200); }
+.rnd-pick-body { display: flex; gap: 20px; padding: 20px; overflow: auto; }
+.rnd-pick-canvas-wrap { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.rnd-pick-canvas { max-width: 100%; max-height: 70vh; object-fit: contain; border: 1px solid var(--gray-200); background: var(--gray-50); cursor: crosshair; image-rendering: auto; }
+.rnd-pick-hint { font: 400 12px var(--bd); color: var(--gray-500, #8a8a8a); font-style: italic; }
+.rnd-pick-form { flex: 0 0 280px; display: flex; flex-direction: column; gap: 14px; }
+.rnd-pick-color { display: flex; align-items: center; gap: 10px; }
+.rnd-sw-lg { width: 40px; height: 40px; border: 1px solid var(--gray-300, #cfcfcf); }
+.rnd-pick-hex { font: 700 14px var(--ff-mono, monospace); color: var(--ink); text-transform: uppercase; }
+.rnd-pick-modo { display: flex; gap: 8px; }
+.rnd-pick-modo .btn-link { border: 1px solid var(--gray-200); border-radius: 4px; padding: 6px 12px; font: 700 11px var(--hd); }
+.rnd-pick-modo .rnd-modo-on { border-color: var(--blue); background: var(--blue-tint); color: var(--blue-strong); }
 
 /* Preset + mapa */
 .rnd-preset-row { display: grid; grid-template-columns: minmax(220px, 360px); gap: 14px; }
