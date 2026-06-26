@@ -670,6 +670,21 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .nrm-x:hover { color: var(--state-error); }
 .nrm-tbl .nrm-param { font: 400 13px var(--bd); color: var(--ink); padding: 9px 14px; }
 .nrm-tbl td input { width: 100%; border: 0; background: transparent; padding: 9px 12px; font: 400 13px var(--bd); color: var(--ink); }
+.nrm-base-sel { width: 100%; border: 0; background: transparent; padding: 9px 10px; font: 400 13px var(--bd); color: var(--ink); cursor: pointer; }
+.nrm-base-sel:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+/* Grupos de estacionamiento: banda lateral de color + fondo sutil para diferenciar.
+   El fondo del grupo gana sobre .nrm-prop-cell/.nrm-calc para que la fila quede pareja. */
+.nrm-estac .nrm-param { position: relative; }
+.nrm-estac .nrm-param::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.nrm-estac-viv   > td { background: #F2F7FF !important; }   /* vivienda — azul */
+.nrm-estac-com   > td { background: #FFF7EC !important; }   /* comercio — ámbar */
+.nrm-estac-equip > td { background: #EEFAF1 !important; }   /* equipamiento — verde */
+.nrm-estac-viv   .nrm-param::before { background: var(--blue); }
+.nrm-estac-com   .nrm-param::before { background: #E0921A; }
+.nrm-estac-equip .nrm-param::before { background: #1F8A5B; }
+/* Resultado calculado: número en azul fuerte para destacar sobre el fondo del grupo */
+.nrm-estac .nrm-calc { color: var(--blue-strong); font-weight: 700; }
 .nrm-tbl td input:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .nrm-tbl .nrm-prop-cell { background: var(--gray-50); }
 .nrm-tbl .nrm-cabida { background: #FBE9E8; color: var(--state-error); font-weight: 700; text-align: right; padding: 9px 12px; font-variant-numeric: tabular-nums; position: relative; }

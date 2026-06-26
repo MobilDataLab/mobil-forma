@@ -9,7 +9,9 @@ export type Normas = {
 };
 
 // Métricas de Forma usadas por los cálculos de estacionamientos.
-type MetricasForma = { viviendas: number; comercio_gfa: number };
+//  - viviendas: nº de departamentos (base "por unidad" de vivienda)
+//  - residencial_util / comercio_gfa: m² para la base "por m²"
+type MetricasForma = { viviendas: number; residencial_util: number; comercio_gfa: number };
 
 // Qué métrica de la cabida (CSV de Forma) alimenta la columna Propuesto de una fila.
 type FuenteCabida = "constructibilidad" | "ocupacion_p1" | "viviendas" | "habitantes" | null;
@@ -20,9 +22,10 @@ type Calculo =
   | "sup_ocup_max"    // terreno bruto × coef. ocupación
   | "dens_hab_max"    // (terreno bruto / 10.000) × densidad hab/há
   | "excavable"       // terreno bruto × factor excavable (%)
-  | "estac_viv"       // viviendas (Forma) × coef. vivienda
-  | "estac_com"       // m² comercio (Forma) ÷ coef. comercio (1 cada X m²)
-  | "estac_total"     // (estac_viv + estac_com) × (1 − desc. bici − desc. metro)
+  | "estac_viv"       // estac. vivienda según base (unidad ×coef / m² ÷coef)
+  | "estac_com"       // estac. comercio según base
+  | "estac_equip"     // estac. equipamiento según base (m² a mano)
+  | "estac_total"     // (viv + com + equip) × (1 − desc. bici − desc. metro)
   | null;
 
 type Param = {
@@ -34,6 +37,8 @@ type Param = {
   cabida?: FuenteCabida;   // valor que viene de Forma (CSV), va en Propuesto
   comparar?: boolean;      // semáforo: compara el valor de Forma contra el calculado de su columna
   factorId?: string;       // id del input de factor editable (excavable %, estac/viv)
+  opciones?: string[];     // si está, la fila es un dropdown (ej. base de cálculo)
+  grupoEstac?: "viv" | "com" | "equip"; // banda de color por grupo de estacionamiento
   grupo?: boolean;
 };
 
@@ -45,11 +50,20 @@ const IN_COEF_OCUP = "coef_ocup";
 const IN_DENS_HA = "dens_max_ha";
 // IDs de factores editables (viven en valores[col][factorId]).
 const F_EXCAVABLE = "f_excavable";      // % del terreno excavable
-const F_COEF_VIV = "f_coef_viv";        // cajones por vivienda
-const F_COEF_COM = "f_coef_com";        // m² de comercio por cajón (1 cada X m²)
+const F_COEF_VIV = "f_coef_viv";        // coef. estac. vivienda
+const F_COEF_COM = "f_coef_com";        // coef. estac. comercio
+const F_COEF_EQUIP = "f_coef_equip";    // coef. estac. equipamiento
+const F_M2_EQUIP = "f_m2_equip";        // m² de equipamiento (a mano, Forma no lo entrega)
 const F_DESC_BICI = "f_desc_bici";      // % descuento por bicicletas
 const F_DESC_METRO = "f_desc_metro";    // % descuento por cercanía al metro
 const F_BICIS = "bicicletas";           // nº de bicicletas (a mano)
+// Base de cálculo por coeficiente: "por unidad" (×coef) o "por m²" (÷coef, 1 cada X).
+const F_BASE_VIV = "f_base_viv";
+const F_BASE_COM = "f_base_com";
+const F_BASE_EQUIP = "f_base_equip";
+const BASE_UNIDAD = "por unidad";
+const BASE_M2 = "por m²";
+const BASES = [BASE_UNIDAD, BASE_M2];
 
 // Parámetros por defecto (de la planilla Mobil). Cada resultado calculado va
 // inmediatamente después del input/coeficiente que lo genera (lista fluida).
@@ -103,24 +117,27 @@ const PARAMS: Param[] = [
     formula: "Terreno bruto × ", factorId: F_EXCAVABLE, calculo: "excavable",
   },
 
-  // ── ESTACIONAMIENTOS (cada coeficiente arriba de su resultado) ──────
+  // ── ESTACIONAMIENTOS (los 3 grupos con la misma forma: Base → Coef → Resultado) ──
   { id: "g_estac", label: "Estacionamientos", grupo: true },
-  { id: F_COEF_VIV, label: "Coeficiente estacionamientos vivienda", formula: "cajones por vivienda" },
-  {
-    id: "estac_viv", label: "Estacionamientos vivienda",
-    formula: "Viviendas × coef.", calculo: "estac_viv",
-  },
-  { id: F_COEF_COM, label: "Coeficiente estacionamientos comercio", formula: "1 cajón cada X m²" },
-  {
-    id: "estac_com", label: "Estacionamientos comercio",
-    formula: "m² comercio ÷ coef.", calculo: "estac_com",
-  },
+  // Vivienda (Forma: nº deptos / m² útil residencial)
+  { id: F_BASE_VIV, label: "Base estac. vivienda", formula: "unidad: nº deptos · m²: útil residencial", opciones: BASES, grupoEstac: "viv" },
+  { id: F_COEF_VIV, label: "Coeficiente estac. vivienda", grupoEstac: "viv" },
+  { id: "estac_viv", label: "Estacionamientos vivienda", formula: "m² útil viv. ÷ coef.  (o nº deptos × coef.)", calculo: "estac_viv", grupoEstac: "viv" },
+  // Comercio (Forma: GFA comercio)
+  { id: F_BASE_COM, label: "Base estac. comercio", formula: "unidad / m²: GFA comercio", opciones: BASES, grupoEstac: "com" },
+  { id: F_COEF_COM, label: "Coeficiente estac. comercio", grupoEstac: "com" },
+  { id: "estac_com", label: "Estacionamientos comercio", formula: "GFA comercio ÷ coef.", calculo: "estac_com", grupoEstac: "com" },
+  // Equipamiento (GFA a mano: Forma no lo entrega → input inline en la fórmula del coef.)
+  { id: F_BASE_EQUIP, label: "Base estac. equipamiento", formula: "unidad / m²: GFA equipamiento", opciones: BASES, grupoEstac: "equip" },
+  { id: F_COEF_EQUIP, label: "Coeficiente estac. equipamiento", formula: "GFA equip: ", factorId: F_M2_EQUIP, grupoEstac: "equip" },
+  { id: "estac_equip", label: "Estacionamientos equipamiento", formula: "GFA equip. ÷ coef.", calculo: "estac_equip", grupoEstac: "equip" },
+  // Descuentos
   { id: F_DESC_BICI, label: "Descuento por bicicletas", formula: "% que reduce el total" },
   { id: F_BICIS, label: "Bicicletas" },
   { id: F_DESC_METRO, label: "Descuento cercanía al metro", formula: "% que reduce el total" },
   {
     id: "estac_total", label: "Estacionamientos totales",
-    formula: "(viv + com) × (1 − desc. bici − desc. metro)", calculo: "estac_total",
+    formula: "(viv + com + equip) × (1 − desc. bici − desc. metro)", calculo: "estac_total",
   },
 ];
 
@@ -167,8 +184,18 @@ const TEASER_ZONA1: Record<string, string> = {
   antejardin: "5",
   rasante: "Natural",
   [F_EXCAVABLE]: "80%",
-  [F_COEF_VIV]: "1",
-  [F_COEF_COM]: "50",
+};
+
+// Teaser de la columna Propuesto: estacionamientos (se trabajan solo en Propuesto).
+// Por defecto "por m²", 1 cajón cada 30 m² (GFA / 30).
+const TEASER_PROPUESTO: Record<string, string> = {
+  [F_BASE_VIV]: BASE_M2,
+  [F_COEF_VIV]: "30",
+  [F_BASE_COM]: BASE_M2,
+  [F_COEF_COM]: "30",
+  [F_BASE_EQUIP]: BASE_M2,
+  [F_M2_EQUIP]: "800",
+  [F_COEF_EQUIP]: "30",
   [F_DESC_BICI]: "5%",
   [F_BICIS]: "40",
   [F_DESC_METRO]: "20%",
@@ -189,12 +216,29 @@ function num(v: string | undefined): number {
 // ¿El factor venía con "%"? Entonces es porcentaje (÷100).
 const esPct = (v: string | undefined) => !!v && v.includes("%");
 
-// Estac. vivienda + comercio antes de descuentos (para el total). Aislado para reuso.
-function estacBase(vCol: Record<string, string>, f: MetricasForma): number {
-  const viv = f.viviendas * num(vCol[F_COEF_VIV]);
-  const coefCom = num(vCol[F_COEF_COM]);
-  const com = coefCom > 0 ? f.comercio_gfa / coefCom : 0;
-  return (Number.isFinite(viv) ? viv : 0) + (Number.isFinite(com) ? com : 0);
+// Estacionamientos de una función según la base elegida:
+//   "por unidad" → unidades × coef · "por m²" → m² ÷ coef (1 cajón cada X m²).
+function estacPorBase(base: string | undefined, unidades: number, m2: number, coef: number): number {
+  if (!Number.isFinite(coef) || coef <= 0) return 0;
+  if (base === BASE_M2) return Number.isFinite(m2) ? m2 / coef : 0;
+  return Number.isFinite(unidades) ? unidades * coef : 0; // por unidad (default)
+}
+
+// Vivienda: unidades = nº departamentos · m² = m² útil residencial.
+const estacViv = (v: Record<string, string>, f: MetricasForma) =>
+  estacPorBase(v[F_BASE_VIV], f.viviendas, f.residencial_util, num(v[F_COEF_VIV]));
+// Comercio: unidades = (no aplica, usa m²) · m² = GFA comercio.
+const estacCom = (v: Record<string, string>, f: MetricasForma) =>
+  estacPorBase(v[F_BASE_COM], f.comercio_gfa, f.comercio_gfa, num(v[F_COEF_COM]));
+// El m²/unidades de equipamiento es global (col. Propuesto): se pasa por `m2equip`.
+const estacEquip = (v: Record<string, string>, m2equip?: string) => {
+  const m2 = num(m2equip ?? v[F_M2_EQUIP]);
+  return estacPorBase(v[F_BASE_EQUIP], m2, m2, num(v[F_COEF_EQUIP]));
+};
+
+// Suma de estac. (viv + com + equip) antes de descuentos.
+function estacBase(vCol: Record<string, string>, f: MetricasForma, m2equip?: string): number {
+  return estacViv(vCol, f) + estacCom(vCol, f) + estacEquip(vCol, m2equip);
 }
 
 // Valor calculado de una fila, según los inputs de UNA columna y las métricas de Forma.
@@ -203,7 +247,7 @@ function valorCalculo(
   calculo: Calculo,
   vCol: Record<string, string> | undefined,
   forma: MetricasForma,
-  factores?: { excavable?: string }
+  factores?: { excavable?: string; m2equip?: string }
 ): number {
   if (!vCol) return NaN;
   switch (calculo) {
@@ -215,13 +259,11 @@ function valorCalculo(
       const factor = esPct(raw) ? num(raw) / 100 : num(raw);
       return num(vCol[IN_TERRENO_BRUTO]) * factor;
     }
-    case "estac_viv": return forma.viviendas * num(vCol[F_COEF_VIV]);
-    case "estac_com": {
-      const coef = num(vCol[F_COEF_COM]);
-      return coef > 0 ? forma.comercio_gfa / coef : NaN;
-    }
+    case "estac_viv": return estacViv(vCol, forma);
+    case "estac_com": return estacCom(vCol, forma);
+    case "estac_equip": return estacEquip(vCol, factores?.m2equip);
     case "estac_total": {
-      const base = estacBase(vCol, forma);
+      const base = estacBase(vCol, forma, factores?.m2equip);
       const dBici = esPct(vCol[F_DESC_BICI]) ? num(vCol[F_DESC_BICI]) / 100 : num(vCol[F_DESC_BICI]) || 0;
       const dMetro = esPct(vCol[F_DESC_METRO]) ? num(vCol[F_DESC_METRO]) / 100 : num(vCol[F_DESC_METRO]) || 0;
       const desc = (Number.isFinite(dBici) ? dBici : 0) + (Number.isFinite(dMetro) ? dMetro : 0);
@@ -249,7 +291,11 @@ export function normasParaExcel(normas: Normas): {
 
   const viviendas = normas.viviendas;
   const habitantes = Math.round(viviendas * (Number(factorHab) || 0));
-  const forma: MetricasForma = { viviendas, comercio_gfa: normas.desglose?.comercio_gfa ?? 0 };
+  const forma: MetricasForma = {
+    viviendas,
+    residencial_util: normas.desglose?.residencial_util ?? 0,
+    comercio_gfa: normas.desglose?.comercio_gfa ?? 0,
+  };
   const cabidaVal = (f: FuenteCabida): number => {
     switch (f) {
       case "constructibilidad": return normas.constructibilidad;
@@ -265,7 +311,10 @@ export function normasParaExcel(normas: Normas): {
   const propId = visibles.find((c) => c.propuesto)?.id;
 
   // Factor de excavable es global (col. Propuesto), aplica a todas las columnas.
-  const factores = { excavable: vCol(propId ?? "")[F_EXCAVABLE] || "" };
+  const factores = {
+    excavable: vCol(propId ?? "")[F_EXCAVABLE] || "",
+    m2equip: vCol(propId ?? "")[F_M2_EQUIP] || "",
+  };
 
   // Texto de la fórmula con el factor real (excavable/estac) embebido.
   const formulaTexto = (p: Param): string | undefined => {
@@ -281,13 +330,16 @@ export function normasParaExcel(normas: Normas): {
     if (p.grupo) return { label: p.label, grupo: true };
     const vals: Record<string, string> = {};
     for (const c of visibles) {
+      // Estacionamientos: solo en Propuesto; otras zonas vacías.
+      if (p.grupoEstac && !c.propuesto) { vals[c.id] = ""; continue; }
+      const fuenteId = p.grupoEstac ? (propId ?? c.id) : c.id;
       if (c.propuesto && p.cabida) {
         vals[c.id] = fmt(cabidaVal(p.cabida));
       } else if (p.calculo) {
-        const n = valorCalculo(p.calculo, vCol(c.id), forma, factores);
+        const n = valorCalculo(p.calculo, vCol(fuenteId), forma, factores);
         vals[c.id] = Number.isFinite(n) ? fmt(n) : "";
       } else {
-        vals[c.id] = valores[c.id]?.[p.id] ?? "";
+        vals[c.id] = valores[fuenteId]?.[p.id] ?? "";
       }
     }
     if (propId && p.cabida && !vals[propId]) vals[propId] = fmt(cabidaVal(p.cabida));
@@ -321,16 +373,20 @@ export default function NormasUrbanisticas({
       if (d.cols?.length) setCols(d.cols.filter((c: Columna) => !c.fusion && c.id !== "fusion"));
       if (d.factorHab) setFactorHab(d.factorHab);
 
-      // Sembrar el teaser si Zona 1 no tiene ningún valor real (navegador nuevo
-      // o estado vacío de pruebas), para mostrar la tabla "viva" y editable.
+      // Sembrar teasers si están vacíos (navegador nuevo o estado de pruebas):
+      // Zona 1 = datos del terreno · Propuesto = estacionamientos.
       const valoresGuardados: Record<string, Record<string, string>> = d.valores ?? {};
+      const next = { ...valoresGuardados };
       const z1 = valoresGuardados.zona1 ?? {};
-      const z1Vacia = Object.values(z1).every((v) => !String(v).trim());
-      if (z1Vacia) {
-        setValores({ ...valoresGuardados, zona1: { ...TEASER_ZONA1 } });
-      } else {
-        setValores(valoresGuardados);
+      if (Object.values(z1).every((v) => !String(v).trim())) {
+        next.zona1 = { ...TEASER_ZONA1 };
       }
+      const prop = valoresGuardados.propuesto ?? {};
+      // Si Propuesto no tiene base de estacionamientos, sembrar su teaser.
+      if (!prop[F_BASE_VIV]) {
+        next.propuesto = { ...prop, ...TEASER_PROPUESTO };
+      }
+      setValores(next);
     } catch { /* ignorar */ }
   }, []);
   // Guardar en cada cambio.
@@ -360,9 +416,16 @@ export default function NormasUrbanisticas({
   const propId = visibles.find((c) => c.propuesto)?.id;
 
   // Métricas de Forma para los cálculos de estacionamientos.
-  const formaMetricas: MetricasForma = { viviendas, comercio_gfa: normas.desglose?.comercio_gfa ?? 0 };
+  const formaMetricas: MetricasForma = {
+    viviendas,
+    residencial_util: normas.desglose?.residencial_util ?? 0,
+    comercio_gfa: normas.desglose?.comercio_gfa ?? 0,
+  };
   // Factor de excavable es global (col. Propuesto), aplica a todas las columnas.
-  const factores = { excavable: (propId && valores[propId]?.[F_EXCAVABLE]) || "" };
+  const factores = {
+    excavable: (propId && valores[propId]?.[F_EXCAVABLE]) || "",
+    m2equip: (propId && valores[propId]?.[F_M2_EQUIP]) || "",
+  };
 
   const agregarZona = () => {
     const n = contarZonas(cols) + 1;
@@ -450,7 +513,7 @@ export default function NormasUrbanisticas({
                   <td colSpan={visibles.length + 2}>{p.label}</td>
                 </tr>
               ) : (
-                <tr key={p.id}>
+                <tr key={p.id} className={p.grupoEstac ? `nrm-estac nrm-estac-${p.grupoEstac}` : ""}>
                   <td className="nrm-param">{p.label}{p.unidad ? ` (${p.unidad})` : ""}</td>
                   <td className="nrm-formula">
                     {p.factorId ? (
@@ -460,7 +523,7 @@ export default function NormasUrbanisticas({
                           type="text"
                           className="nrm-factor-inline"
                           value={(propId && valores[propId]?.[p.factorId]) ?? ""}
-                          placeholder={p.factorId === F_EXCAVABLE ? "80%" : "1"}
+                          placeholder={p.factorId === F_EXCAVABLE ? "80%" : p.factorId === F_M2_EQUIP ? "800" : "1"}
                           title="Factor editable"
                           onChange={(e) => propId && setValor(propId, p.factorId!, e.target.value)}
                         />
@@ -490,22 +553,45 @@ export default function NormasUrbanisticas({
                         </td>
                       );
                     }
-                    // b) Fila calculada (máximo / derivado) en una zona.
+                    // Las filas de estacionamiento se trabajan SOLO en Propuesto.
+                    // En otras zonas quedan vacías (mantienen el color del grupo).
+                    if (p.grupoEstac && !c.propuesto) {
+                      return <td key={c.id} className="nrm-estac-vacia" />;
+                    }
+                    // La columna de cálculo/edición de estac. es siempre Propuesto.
+                    const colVals = p.grupoEstac ? (propId ? valores[propId] : undefined) : valores[c.id];
+                    const colId = p.grupoEstac ? (propId ?? c.id) : c.id;
+
+                    // b) Fila calculada (máximo / derivado).
                     if (p.calculo) {
-                      const n = valorCalculo(p.calculo, valores[c.id], formaMetricas, factores);
+                      const n = valorCalculo(p.calculo, colVals, formaMetricas, factores);
                       return (
-                        <td key={c.id} className="num nrm-calc" title="Calculado desde los inputs de la zona">
+                        <td key={c.id} className="num nrm-calc" title="Calculado desde los inputs">
                           {Number.isFinite(n) ? fmt(n) : "—"}
                         </td>
                       );
                     }
-                    // c) Celda editable a mano.
+                    // c) Fila tipo dropdown (ej. base de cálculo por unidad/m²).
+                    if (p.opciones) {
+                      return (
+                        <td key={c.id} className={c.propuesto ? "nrm-prop-cell" : ""}>
+                          <select
+                            className="nrm-base-sel"
+                            value={colVals?.[p.id] ?? p.opciones[0]}
+                            onChange={(e) => setValor(colId, p.id, e.target.value)}
+                          >
+                            {p.opciones.map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </td>
+                      );
+                    }
+                    // d) Celda editable a mano.
                     return (
                       <td key={c.id} className={c.propuesto ? "nrm-prop-cell" : ""}>
                         <input
                           type="text"
-                          value={valores[c.id]?.[p.id] ?? ""}
-                          onChange={(e) => setValor(c.id, p.id, e.target.value)}
+                          value={colVals?.[p.id] ?? ""}
+                          onChange={(e) => setValor(colId, p.id, e.target.value)}
                         />
                       </td>
                     );
