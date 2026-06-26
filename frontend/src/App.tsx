@@ -260,6 +260,23 @@ json.dumps({
     }
   }
 
+  // Descarga SÓLO la hoja Normativa como Excel "tipo Mobil" (con lo que se ve en
+  // pantalla: inputs/teaser + valores de Forma). No requiere CSV cargado.
+  function descargarNormasExcel() {
+    const py = pyRef.current;
+    if (!py) { setMsg({ t: "err", x: "El motor aún se está cargando." }); return; }
+    if (!normas) { setMsg({ t: "err", x: "Carga un CSV para incluir los valores de Forma." }); return; }
+    try {
+      const data = normasParaExcel(normas);
+      py.globals.set("normas_json", JSON.stringify(data));
+      const b64: string = py.runPython("import json; normativa_xlsx(json.loads(normas_json))");
+      descargarXlsxBase64(b64, "normas-urbanisticas");
+      setMsg({ t: "ok", x: "Excel de normativa generado y descargado." });
+    } catch (e) {
+      setMsg({ t: "err", x: (e as Error).message });
+    }
+  }
+
   // Descarga la paleta canónica como Excel "tipo Mobil" (celdas con el color real).
   function descargarPaletaExcel() {
     const py = pyRef.current;
@@ -443,7 +460,7 @@ json.dumps({
 
         {vistaActiva === "normas" && normas && (
           <div className="grid">
-            <section className="panel col-12"><NormasUrbanisticas normas={normas} /></section>
+            <section className="panel col-12"><NormasUrbanisticas normas={normas} onDescargarExcel={descargarNormasExcel} /></section>
           </div>
         )}
 

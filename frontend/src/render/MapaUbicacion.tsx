@@ -37,12 +37,14 @@ export default function MapaUbicacion({
     const marker = L.marker([ubicacion.lat, ubicacion.lng], { icon: ICONO, draggable: true }).addTo(map);
     markerRef.current = marker;
 
+    // Fija el punto y, en paralelo, busca el nombre del lugar (reverse-geocoding).
     const fijar = (lat: number, lng: number) => {
       marker.setLatLng([lat, lng]);
-      onChangeRef.current({
-        lat: Number(lat.toFixed(5)),
-        lng: Number(lng.toFixed(5)),
-        etiqueta: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      const lat5 = Number(lat.toFixed(5)), lng5 = Number(lng.toFixed(5));
+      // Primero notifica coords con etiqueta provisional (coords); luego el nombre.
+      onChangeRef.current({ lat: lat5, lng: lng5, etiqueta: `${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+      reverseGeocode(lat, lng).then((nombre) => {
+        if (nombre) onChangeRef.current({ lat: lat5, lng: lng5, etiqueta: nombre });
       });
     };
     map.on("click", (e: L.LeafletMouseEvent) => fijar(e.latlng.lat, e.latlng.lng));
@@ -97,4 +99,23 @@ export default function MapaUbicacion({
       <span className="rnd-mapa-coords">Click o arrastra el marcador · {ubicacion.lat}, {ubicacion.lng}</span>
     </div>
   );
+}
+
+// Reverse-geocoding (Nominatim): coords → nombre de lugar corto y legible.
+// Sin red o sin resultado → null (el caller mantiene la etiqueta provisional).
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&zoom=12&lat=${lat}&lon=${lng}`;
+    const r = await fetch(url, { headers: { "Accept-Language": "es" } });
+    const d = (await r.json()) as { address?: Record<string, string>; display_name?: string };
+    const a = d.address ?? {};
+    // Arma "localidad, comuna/región, país" desde los campos disponibles.
+    const localidad = a.city || a.town || a.village || a.suburb || a.hamlet || a.county || "";
+    const region = a.state || a.region || "";
+    const pais = a.country || "";
+    const partes = [localidad, region, pais].filter(Boolean);
+    return partes.length ? partes.join(", ") : d.display_name ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -1,33 +1,63 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ColorCanonico } from "../PaletaColores";
-import type { InspeccionImagen, CondicionesToma, Preset, Ubicacion } from "./tipos";
+import type { InspeccionImagen, CondicionesToma, Preset, Ubicacion, UsoDetectado } from "./tipos";
 import { detectarColores } from "./colorDetector";
 import { construirJSON, aTexto } from "./jsonBuilder";
-import { PRESETS } from "./presetsProyecto";
+import { climaDesdeCoords } from "./clima";
 import TablaColores from "./TablaColores";
-import PanelCondiciones from "./PanelCondiciones";
+import ColorPickerModal from "./ColorPickerModal";
+import PanelCondiciones, { AUTO_CLIMA } from "./PanelCondiciones";
 import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
+// Default editorial (registro arquitectónico, no cliché comercial).
 const TOMA_DEFAULT: CondicionesToma = {
-  luz: "warm late-afternoon daylight",
-  hora: "tarde",
-  sombras: "suaves",
-  camara: "vista peatonal",
-  lente: "normal (35-50mm)",
-  estilo: "fotorrealista",
+  // Atmósfera
+  escuela: "editorial atmosférico (luz difusa, paleta sobria, integrado al paisaje)",
+  luz: "soft diffuse overcast light",
+  cielo: "nublado suave",
+  paletaTono: "tierra / natural",
+  sombras: "difusas",
+  // Expresión arquitectónica
+  encuentroUrbano: "zócalo comercial permeable, vereda activa",
+  tectonica: "fachada profunda con sombra y ritmo estructural",
+  materialGlobal: "ninguno (según materialidad por uso)",
+  acabado: "mate, uso natural leve",
+  // Contexto
+  sustentabilidad: "ninguna visible",
+  vegetacion: AUTO_CLIMA,
+  estacion: AUTO_CLIMA,
+  genteAutos: "mínimos",
+  // Render
   detalle: "alto detalle",
-  postproceso: "natural",
-  estacion: "seco",
-  cielo: "despejado",
-  vegetacionDensidad: "media",
-  mobiliario: "básico (bancas, luminarias)",
-  fondo: "cerros / cordillera",
-  atmosfera: "acogedor, familiar, seguro",
-  genteAutos: "integrados",
-  acabado: "mate",
-  reflejos: "sutiles",
-  desgaste: "nuevo / impecable",
-  paletaTono: "neutra",
+  referenciaFoto: "ninguna",
+};
+
+// Perfiles de arranque: aplican un set coherente de ejes de una sola vez.
+const PERFILES: Record<string, { nombre: string; patch: Partial<CondicionesToma> }> = {
+  editorial: {
+    nombre: "Editorial / arquitectura",
+    patch: {
+      escuela: "editorial atmosférico (luz difusa, paleta sobria, integrado al paisaje)",
+      luz: "soft diffuse overcast light",
+      cielo: "nublado suave",
+      sombras: "difusas",
+      paletaTono: "tierra / natural",
+      genteAutos: "mínimos",
+      acabado: "mate, uso natural leve",
+    },
+  },
+  comercial: {
+    nombre: "Comunicación comercial",
+    patch: {
+      escuela: "narrativo urbano (saturado, energía de calle)",
+      luz: "warm late-afternoon daylight",
+      cielo: "despejado",
+      sombras: "suaves",
+      paletaTono: "cálida",
+      genteAutos: "integrados",
+      acabado: "mate, impecable",
+    },
+  },
 };
 
 // Batuco por defecto (coincide con el preset).
@@ -42,10 +72,18 @@ export default function RenderControlado({ paleta }: Props) {
   const [nombre, setNombre] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [inspeccion, setInspeccion] = useState<InspeccionImagen | null>(null);
-  const [preset, setPreset] = useState<Preset>(PRESETS.batuco);
   const [toma, setToma] = useState<CondicionesToma>(TOMA_DEFAULT);
   const [ubicacion, setUbicacion] = useState<Ubicacion>(UBIC_DEFAULT);
+
+  // El preset (clima + vegetación) se DERIVA de la ubicación: el mapa es la única
+  // fuente. La etiqueta del lugar alimenta el campo `location` del JSON.
+  const preset: Preset = useMemo(() => {
+    const base = climaDesdeCoords(ubicacion.lat, ubicacion.lng);
+    return { ...base, location: ubicacion.etiqueta || base.location };
+  }, [ubicacion.lat, ubicacion.lng, ubicacion.etiqueta]);
   const [copiado, setCopiado] = useState(false);
+  const [copiadoPrompt, setCopiadoPrompt] = useState(false);
+  const [pickerAbierto, setPickerAbierto] = useState(false);
   const [error, setError] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -89,17 +127,53 @@ export default function RenderControlado({ paleta }: Props) {
     });
   };
 
+  // Agrega un uso pickeado a mano. Si el nombre choca, lo desambigua con sufijo.
+  const agregarUsoManual = (nuevo: UsoDetectado) => {
+    if (!inspeccion) return;
+    let funcion = nuevo.funcion;
+    const nombres = new Set(inspeccion.usos.map((u) => u.funcion));
+    if (nombres.has(funcion)) {
+      let i = 2;
+      while (nombres.has(`${funcion} (${i})`)) i++;
+      funcion = `${funcion} (${i})`;
+    }
+    setInspeccion({ ...inspeccion, usos: [...inspeccion.usos, { ...nuevo, funcion }] });
+  };
+
+  // Quita un uso (solo los agregados a mano; los detectados se ocultan con el checkbox).
+  const quitarUso = (funcion: string) => {
+    if (!inspeccion) return;
+    setInspeccion({ ...inspeccion, usos: inspeccion.usos.filter((u) => u.funcion !== funcion) });
+  };
+
+  // Edita un atributo estructurado del elemento (altura / distribución / rol).
+  const cambiarAtributo = (funcion: string, campo: "altura" | "distribucion" | "rol", v: string) => {
+    if (!inspeccion) return;
+    setInspeccion({
+      ...inspeccion,
+      usos: inspeccion.usos.map((u) => (u.funcion === funcion ? { ...u, [campo]: v } : u)),
+    });
+  };
+
   const confirmados = inspeccion?.usos.filter((u) => u.confirmado) ?? [];
-  const jsonText =
-    inspeccion && confirmados.length
-      ? aTexto(construirJSON(confirmados, preset, toma, ubicacion))
-      : "";
+  const contrato =
+    inspeccion && confirmados.length ? construirJSON(confirmados, preset, toma, ubicacion) : null;
+  const jsonText = contrato ? aTexto(contrato) : "";
+  const promptText = contrato?.render_prompt.prompt ?? "";
 
   const copiar = () => {
     if (!jsonText) return;
     navigator.clipboard?.writeText(jsonText).then(() => {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 1500);
+    });
+  };
+
+  const copiarPrompt = () => {
+    if (!promptText) return;
+    navigator.clipboard?.writeText(promptText).then(() => {
+      setCopiadoPrompt(true);
+      setTimeout(() => setCopiadoPrompt(false), 1500);
     });
   };
 
@@ -134,27 +208,53 @@ export default function RenderControlado({ paleta }: Props) {
       {inspeccion && (
         <>
           {/* 2. Confirmar usos detectados + materialidad por función */}
-          <TablaColores inspeccion={inspeccion} onToggle={toggle} onMaterialidad={cambiarMaterialidad} />
+          <TablaColores
+            inspeccion={inspeccion}
+            onToggle={toggle}
+            onMaterialidad={cambiarMaterialidad}
+            onAtributo={cambiarAtributo}
+            onQuitar={quitarUso}
+            onAbrirPicker={previewUrl ? () => setPickerAbierto(true) : undefined}
+          />
 
-          {/* 3. Condiciones (preset + mapa + ejes de toma) */}
+          {/* 3. Condiciones (ubicación → clima derivado + mapa + ejes de toma) */}
           <PanelCondiciones
-            presetId={preset.id}
+            climaInferido={preset.clima}
             toma={toma}
             ubicacion={ubicacion}
-            onPreset={setPreset}
+            perfiles={PERFILES}
+            onPerfil={(id) => { const p = PERFILES[id]; if (p) setToma((t) => ({ ...t, ...p.patch })); }}
             onToma={(patch) => setToma((t) => ({ ...t, ...patch }))}
             onUbicacion={setUbicacion}
           />
 
-          {/* 4. JSON de salida + copiar */}
+          {/* 4a. Prompt en prosa (capa primaria) + copiar */}
           <div className="rnd-json-head">
-            <span className="rnd-cap-tit">JSON para el render ({confirmados.length} uso{confirmados.length === 1 ? "" : "s"})</span>
+            <span className="rnd-cap-tit">Prompt arquitectónico (prosa)</span>
+            <button className="btn-export" onClick={copiarPrompt} disabled={!promptText}>
+              <IconoDescarga /> {copiadoPrompt ? "¡Copiado!" : "Copiar prompt"}
+            </button>
+          </div>
+          <pre className="rnd-prompt">{promptText || "Confirma al menos un uso para generar el prompt."}</pre>
+
+          {/* 4b. JSON completo (prompt + params + negative) + copiar */}
+          <div className="rnd-json-head">
+            <span className="rnd-cap-tit">JSON completo para el render ({confirmados.length} uso{confirmados.length === 1 ? "" : "s"})</span>
             <button className="btn-export" onClick={copiar} disabled={!jsonText}>
               <IconoDescarga /> {copiado ? "¡Copiado!" : "Copiar JSON"}
             </button>
           </div>
           <pre className="rnd-json">{jsonText || "Confirma al menos un uso para generar el JSON."}</pre>
         </>
+      )}
+
+      {pickerAbierto && previewUrl && (
+        <ColorPickerModal
+          imagenUrl={previewUrl}
+          paleta={paleta}
+          onAgregar={agregarUsoManual}
+          onCerrar={() => setPickerAbierto(false)}
+        />
       )}
     </div>
   );

@@ -1,98 +1,142 @@
-import type { Preset, CondicionesToma, Ubicacion } from "./tipos";
-import { PRESETS_LISTA } from "./presetsProyecto";
+import type { CondicionesToma, Ubicacion } from "./tipos";
+import {
+  ESCUELAS, REFERENCIAS_FOTO, ENCUENTROS_URBANOS, TECTONICAS, SUSTENTABILIDADES,
+  ACENTOS_MATERIALES, LUCES_EDITORIALES,
+} from "./vocabulario";
 import MapaUbicacion from "./MapaUbicacion";
 
+// Sentinela: vegetación/estación "auto" → el prompt usa lo inferido del clima.
+export const AUTO_CLIMA = "auto (del clima)";
+// Sentinela del dropdown: "Personalizado…" → habilita texto libre en cualquier eje.
+const CUSTOM = "__custom__";
+
 // Opciones por eje (etiquetas, no valores continuos: el modelo externo
-// interpreta mejor etiquetas que números exactos).
+// interpreta mejor etiquetas que números exactos). La cámara/vista NO se elige:
+// viene bloqueada de la imagen (preset).
 const OPC: Record<keyof CondicionesToma, string[]> = {
-  // Luz / cámara
-  luz: ["warm late-afternoon daylight", "soft morning light", "overcast diffuse light", "blue hour", "dramatic sunset", "midday sun"],
-  hora: ["tarde", "mañana", "mediodía", "atardecer", "amanecer", "hora azul"],
-  sombras: ["suaves", "marcadas", "largas", "difusas", "sin sombra dura"],
-  camara: ["vista peatonal", "vista a media altura", "aérea baja (dron)", "aérea alta", "contrapicado"],
-  lente: ["normal (35-50mm)", "gran angular", "teleobjetivo", "tilt-shift arquitectónico"],
-  // Estilo
-  estilo: ["fotorrealista", "render arquitectónico limpio", "acuarela", "maqueta física", "boceto a lápiz", "atardecer cinematográfico"],
-  detalle: ["alto detalle", "detalle medio", "esquemático"],
-  postproceso: ["natural", "alto contraste", "tonos pastel", "blanco y negro", "look editorial"],
-  // Entorno
-  estacion: ["seco", "florecido", "otoño", "invierno"],
+  // 1. Atmósfera
+  escuela: Object.keys(ESCUELAS),
+  luz: [...LUCES_EDITORIALES, "warm late-afternoon daylight", "soft morning light", "blue hour", "dramatic sunset", "midday sun"],
   cielo: ["despejado", "nublado suave", "parcialmente nublado", "dramático con nubes"],
-  vegetacionDensidad: ["media", "abundante", "escasa / xerófita", "sin vegetación"],
-  mobiliario: ["básico (bancas, luminarias)", "completo (paraderos, ciclovías, áreas verdes)", "mínimo", "sin mobiliario"],
-  fondo: ["ciudad", "cerros / cordillera", "agua / costa", "campo abierto", "neutro"],
-  atmosfera: ["acogedor, familiar, seguro", "urbano dinámico", "sereno y residencial", "premium / aspiracional"],
-  genteAutos: ["integrados", "mínimos", "sin gente", "alta actividad"],
-  // Materiales globales
-  acabado: ["mate", "satinado", "brillante", "mixto"],
-  reflejos: ["sutiles", "marcados", "sin reflejos"],
-  desgaste: ["nuevo / impecable", "uso natural leve", "envejecido"],
-  paletaTono: ["neutra", "cálida", "fría", "tierra / natural"],
+  paletaTono: ["tierra / natural", "neutra", "cálida", "fría"],
+  sombras: ["difusas", "suaves", "marcadas", "largas", "sin sombra dura"],
+  // 2. Expresión arquitectónica
+  encuentroUrbano: Object.keys(ENCUENTROS_URBANOS),
+  tectonica: Object.keys(TECTONICAS),
+  materialGlobal: Object.keys(ACENTOS_MATERIALES),
+  // Acabado fusiona terminación + pátina (el desgaste que vale la pena conservar).
+  acabado: [
+    "mate, uso natural leve",
+    "mate, impecable",
+    "satinado, impecable",
+    "envejecido / con pátina",
+    "brillante",
+  ],
+  // 3. Contexto
+  sustentabilidad: Object.keys(SUSTENTABILIDADES),
+  vegetacion: [AUTO_CLIMA, "abundante", "media", "escasa / xerófita", "sin vegetación"],
+  estacion: [AUTO_CLIMA, "seco", "florecido", "otoño", "invierno"],
+  genteAutos: ["mínimos", "integrados", "sin gente", "alta actividad"],
+  // 4. Render
+  detalle: ["alto detalle", "detalle medio", "esquemático"],
+  referenciaFoto: Object.keys(REFERENCIAS_FOTO),
 };
 
 const GRUPOS: { titulo: string; campos: { key: keyof CondicionesToma; label: string }[] }[] = [
-  { titulo: "Luz y cámara", campos: [
-    { key: "luz", label: "Luz" }, { key: "hora", label: "Hora" }, { key: "sombras", label: "Sombras" },
-    { key: "camara", label: "Cámara" }, { key: "lente", label: "Lente" },
+  { titulo: "Atmósfera", campos: [
+    { key: "escuela", label: "Escuela / registro" },
+    { key: "luz", label: "Luz" }, { key: "cielo", label: "Cielo" },
+    { key: "paletaTono", label: "Paleta de tono" }, { key: "sombras", label: "Sombras" },
   ]},
-  { titulo: "Estilo de render", campos: [
-    { key: "estilo", label: "Estilo" }, { key: "detalle", label: "Detalle" }, { key: "postproceso", label: "Postproceso" },
+  { titulo: "Expresión arquitectónica", campos: [
+    { key: "encuentroUrbano", label: "Encuentro urbano" },
+    { key: "tectonica", label: "Tectónica de fachada" },
+    { key: "materialGlobal", label: "Acento material" },
+    { key: "acabado", label: "Acabado" },
   ]},
-  { titulo: "Entorno y contexto", campos: [
-    { key: "estacion", label: "Estación" }, { key: "cielo", label: "Cielo" },
-    { key: "vegetacionDensidad", label: "Vegetación" }, { key: "mobiliario", label: "Mobiliario urbano" },
-    { key: "fondo", label: "Fondo" }, { key: "atmosfera", label: "Atmósfera" }, { key: "genteAutos", label: "Gente y autos" },
+  { titulo: "Contexto", campos: [
+    { key: "sustentabilidad", label: "Sustentabilidad visible" },
+    { key: "vegetacion", label: "Vegetación" },
+    { key: "estacion", label: "Estación" },
+    { key: "genteAutos", label: "Gente y autos" },
   ]},
-  { titulo: "Materiales globales", campos: [
-    { key: "acabado", label: "Acabado" }, { key: "reflejos", label: "Reflejos" },
-    { key: "desgaste", label: "Desgaste" }, { key: "paletaTono", label: "Paleta de tono" },
+  { titulo: "Render", campos: [
+    { key: "detalle", label: "Detalle" },
+    { key: "referenciaFoto", label: "Referencia fotográfica" },
   ]},
 ];
 
 export default function PanelCondiciones({
-  presetId,
+  climaInferido,
   toma,
   ubicacion,
-  onPreset,
+  perfiles,
+  onPerfil,
   onToma,
   onUbicacion,
 }: {
-  presetId: string;
+  climaInferido: string;
   toma: CondicionesToma;
   ubicacion: Ubicacion;
-  onPreset: (p: Preset) => void;
+  perfiles: Record<string, { nombre: string; patch: Partial<CondicionesToma> }>;
+  onPerfil: (id: string) => void;
   onToma: (patch: Partial<CondicionesToma>) => void;
   onUbicacion: (u: Ubicacion) => void;
 }) {
-  const campo = (label: string, key: keyof CondicionesToma) => (
-    <div className="field rnd-field" key={key}>
-      <label>{label}</label>
-      <select value={toma[key]} onChange={(e) => onToma({ [key]: e.target.value } as Partial<CondicionesToma>)}>
-        {OPC[key].map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
-  );
+  const set = (key: keyof CondicionesToma, value: string) =>
+    onToma({ [key]: value } as Partial<CondicionesToma>);
+
+  const campo = (label: string, key: keyof CondicionesToma) => {
+    const valor = toma[key];
+    // Si el valor actual no está entre las opciones → modo personalizado (texto libre).
+    const esCustom = !OPC[key].includes(valor);
+    return (
+      <div className="field rnd-field" key={key}>
+        <label>{label}</label>
+        <select
+          value={esCustom ? CUSTOM : valor}
+          onChange={(e) => set(key, e.target.value === CUSTOM ? (esCustom ? valor : "") : e.target.value)}
+        >
+          {OPC[key].map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value={CUSTOM}>✏️ Personalizado…</option>
+        </select>
+        {esCustom && (
+          <input
+            type="text"
+            className="rnd-campo-libre"
+            placeholder="Escribe un valor a mano…"
+            value={valor}
+            onChange={(e) => set(key, e.target.value)}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="rnd-cond">
-      {/* Capa preset + mapa */}
+      {/* Perfil de atmósfera: aplica un set coherente de ejes de una vez */}
       <div className="rnd-cond-cap">
-        <span className="rnd-cap-tit">Ubicación y preset del proyecto</span>
-        <div className="rnd-preset-row">
-          <div className="field rnd-field">
-            <label>Clima / contexto</label>
-            <select
-              value={presetId}
-              onChange={(e) => {
-                const p = PRESETS_LISTA.find((x) => x.id === e.target.value);
-                if (p) onPreset(p);
-              }}
-            >
-              {PRESETS_LISTA.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
-          </div>
+        <span className="rnd-cap-tit">Perfil de atmósfera</span>
+        <div className="rnd-perfiles">
+          {Object.entries(perfiles).map(([id, p]) => (
+            <button key={id} type="button" className="btn-link rnd-perfil-btn" onClick={() => onPerfil(id)}>
+              {p.nombre}
+            </button>
+          ))}
+          <span className="rnd-perfil-hint">aplica luz, paleta, escuela y estilo de una vez</span>
         </div>
+      </div>
+
+      {/* Ubicación = única fuente. El mapa fija lat/lng → clima inferido. */}
+      <div className="rnd-cond-cap">
+        <span className="rnd-cap-tit">Ubicación del proyecto</span>
         <MapaUbicacion ubicacion={ubicacion} onChange={onUbicacion} />
+        <div className="rnd-clima-inferido">
+          <span className="rnd-clima-lbl">Clima inferido</span>
+          <span className="rnd-clima-val">{climaInferido}</span>
+          <span className="rnd-clima-hint">se deduce de la latitud · ajusta el marcador en el mapa</span>
+        </div>
       </div>
 
       {/* Ejes de la toma, agrupados */}
