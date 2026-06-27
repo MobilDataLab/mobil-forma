@@ -83,6 +83,7 @@ export default function RenderControlado({ paleta }: Props) {
   }, [ubicacion.lat, ubicacion.lng, ubicacion.etiqueta]);
   const [copiado, setCopiado] = useState(false);
   const [copiadoPrompt, setCopiadoPrompt] = useState(false);
+  const [copiadoRestric, setCopiadoRestric] = useState(false);
   const [pickerAbierto, setPickerAbierto] = useState(false);
   const [error, setError] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -161,6 +162,19 @@ export default function RenderControlado({ paleta }: Props) {
   const jsonText = contrato ? aTexto(contrato) : "";
   const promptText = contrato?.render_prompt.prompt ?? "";
 
+  // Restricciones en lista de texto plano: lo que NO debe cambiar (geometría,
+  // cámara, contexto) + negativos anti-CGI. Salen del contrato, en dos bloques.
+  const restriccionesText = useMemo(() => {
+    if (!contrato) return "";
+    const { negative, no_cambiar } = contrato.render_prompt;
+    const bloque = (titulo: string, items: string[]) =>
+      `${titulo}:\n${items.map((i) => `- ${i}`).join("\n")}`;
+    return [
+      bloque("NO CAMBIAR", no_cambiar),
+      bloque("NEGATIVE", negative),
+    ].join("\n\n");
+  }, [contrato]);
+
   const copiar = () => {
     if (!jsonText) return;
     navigator.clipboard?.writeText(jsonText).then(() => {
@@ -174,6 +188,14 @@ export default function RenderControlado({ paleta }: Props) {
     navigator.clipboard?.writeText(promptText).then(() => {
       setCopiadoPrompt(true);
       setTimeout(() => setCopiadoPrompt(false), 1500);
+    });
+  };
+
+  const copiarRestricciones = () => {
+    if (!restriccionesText) return;
+    navigator.clipboard?.writeText(restriccionesText).then(() => {
+      setCopiadoRestric(true);
+      setTimeout(() => setCopiadoRestric(false), 1500);
     });
   };
 
@@ -236,6 +258,15 @@ export default function RenderControlado({ paleta }: Props) {
             </button>
           </div>
           <pre className="rnd-prompt">{promptText || "Confirma al menos un uso para generar el prompt."}</pre>
+
+          {/* 4a-bis. Restricciones (lo que NO debe cambiar + negativos) + copiar */}
+          <div className="rnd-json-head">
+            <span className="rnd-cap-tit">Restricciones del render</span>
+            <button className="btn-export" onClick={copiarRestricciones} disabled={!restriccionesText}>
+              <IconoDescarga /> {copiadoRestric ? "¡Copiado!" : "Copiar restricciones"}
+            </button>
+          </div>
+          <pre className="rnd-prompt">{restriccionesText || "Confirma al menos un uso para generar las restricciones."}</pre>
 
           {/* 4b. JSON completo (prompt + params + negative) + copiar */}
           <div className="rnd-json-head">
