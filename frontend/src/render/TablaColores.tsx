@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { InspeccionImagen } from "./tipos";
-import { opcionesDe } from "./materialidad";
+import { materialKeysDe } from "./materialidad.generated";
 
 // Sentinela del dropdown: "Personalizado…" → habilita texto libre de materialidad.
 const PERSONALIZADO = "__custom__";
@@ -54,9 +54,9 @@ export default function TablaColores({
             <tr><td colSpan={6} className="tbl-vacio">No hay usos. Pickea un color de la imagen para agregar uno.</td></tr>
           )}
           {inspeccion.usos.map((u) => {
-            const opciones = u.libre ? [] : opcionesDe(u.funcion);
-            // ¿La materialidad actual está fuera del banco? → modo personalizado.
-            const esCustom = u.libre || !opciones.includes(u.materialidad);
+            const opciones = u.libre ? [] : materialKeysDe(u.funcion);
+            // ¿La materialidad actual (option_key) está fuera del banco? → modo personalizado.
+            const esCustom = u.libre || !opciones.some((o) => o.key === u.materialidad);
             return (
               <tr key={u.funcion} className={u.confirmado ? "" : "rnd-off"}>
                 <td className="rnd-chk">
@@ -84,7 +84,7 @@ export default function TablaColores({
                         onMaterialidad(u.funcion, v === PERSONALIZADO ? (esCustom ? u.materialidad : "") : v);
                       }}
                     >
-                      {opciones.map((m) => <option key={m} value={m}>{m}</option>)}
+                      {opciones.map((m) => <option key={m.key} value={m.key}>{m.labelEs}</option>)}
                       <option value={PERSONALIZADO}>✏️ Personalizado…</option>
                     </select>
                     {esCustom && (

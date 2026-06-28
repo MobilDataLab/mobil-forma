@@ -6,56 +6,56 @@ import { construirJSON, aTexto } from "./jsonBuilder";
 import { climaDesdeCoords } from "./clima";
 import TablaColores from "./TablaColores";
 import ColorPickerModal from "./ColorPickerModal";
-import PanelCondiciones, { AUTO_CLIMA } from "./PanelCondiciones";
+import PanelCondiciones from "./PanelCondiciones";
+import { defaultKey } from "./vocabulario.generated";
 import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
-// Default editorial (registro arquitectónico, no cliché comercial).
+// Default = el option_key marcado isDefault de cada eje en el Excel (fuente de verdad).
 const TOMA_DEFAULT: CondicionesToma = {
   // Atmósfera
-  escuela: "editorial atmosférico (luz difusa, paleta sobria, integrado al paisaje)",
-  luz: "soft diffuse overcast light",
-  cielo: "nublado suave",
-  paletaTono: "tierra / natural",
-  sombras: "difusas",
+  register: defaultKey("register"),
+  light: defaultKey("light"),
+  sky: defaultKey("sky"),
+  colorGrade: defaultKey("color_grade"),
+  shadows: defaultKey("shadows"),
+  finish: defaultKey("finish"),
+  detail: defaultKey("detail"),
+  photoReference: defaultKey("photo_reference"),
+  people: defaultKey("people"),
   // Expresión arquitectónica
-  encuentroUrbano: "zócalo comercial permeable, vereda activa",
-  tectonica: "fachada profunda con sombra y ritmo estructural",
-  materialGlobal: "ninguno (según materialidad por uso)",
-  acabado: "mate, uso natural leve",
+  urbanEdge: defaultKey("urban_edge"),
+  tectonics: defaultKey("tectonics"),
+  accent: defaultKey("accent"),
   // Contexto
-  sustentabilidad: "ninguna visible",
-  vegetacion: AUTO_CLIMA,
-  estacion: AUTO_CLIMA,
-  genteAutos: "mínimos",
-  // Render
-  detalle: "alto detalle",
-  referenciaFoto: "ninguna",
+  vegetation: defaultKey("vegetation"),
+  season: defaultKey("season"),
+  sustainability: defaultKey("sustainability"),
 };
 
-// Perfiles de arranque: aplican un set coherente de ejes de una sola vez.
+// Perfiles de arranque: aplican un set coherente de ejes (por option_key) de una vez.
 const PERFILES: Record<string, { nombre: string; patch: Partial<CondicionesToma> }> = {
   editorial: {
     nombre: "Editorial / arquitectura",
     patch: {
-      escuela: "editorial atmosférico (luz difusa, paleta sobria, integrado al paisaje)",
-      luz: "soft diffuse overcast light",
-      cielo: "nublado suave",
-      sombras: "difusas",
-      paletaTono: "tierra / natural",
-      genteAutos: "mínimos",
-      acabado: "mate, uso natural leve",
+      register: "editorial_atmospheric",
+      light: "soft_diffuse_overcast",
+      sky: "soft_overcast",
+      shadows: "soft_long",
+      colorGrade: "earthy_restrained",
+      people: "minimal_silhouettes",
+      finish: "matte_weathered",
     },
   },
   comercial: {
     nombre: "Comunicación comercial",
     patch: {
-      escuela: "narrativo urbano (saturado, energía de calle)",
-      luz: "warm late-afternoon daylight",
-      cielo: "despejado",
-      sombras: "suaves",
-      paletaTono: "cálida",
-      genteAutos: "integrados",
-      acabado: "mate, impecable",
+      register: "urban_narrative",
+      light: "raking_late",
+      sky: "clear",
+      shadows: "raking",
+      colorGrade: "warm_golden",
+      people: "integrated",
+      finish: "matte_new",
     },
   },
 };
@@ -160,18 +160,18 @@ export default function RenderControlado({ paleta }: Props) {
   const contrato =
     inspeccion && confirmados.length ? construirJSON(confirmados, preset, toma, ubicacion) : null;
   const jsonText = contrato ? aTexto(contrato) : "";
-  const promptText = contrato?.render_prompt.prompt ?? "";
+  const promptText = contrato?.prompt ?? "";
 
-  // Restricciones en lista de texto plano: lo que NO debe cambiar (geometría,
-  // cámara, contexto) + negativos anti-CGI. Salen del contrato, en dos bloques.
+  // Restricciones en texto plano: lo que se PRESERVA (geometría, cámara, contexto)
+  // en positivo + lo que se debe EVITAR. Salen del contrato v2, en dos bloques.
   const restriccionesText = useMemo(() => {
     if (!contrato) return "";
-    const { negative, no_cambiar } = contrato.render_prompt;
+    const { preserve, avoid } = contrato;
     const bloque = (titulo: string, items: string[]) =>
       `${titulo}:\n${items.map((i) => `- ${i}`).join("\n")}`;
     return [
-      bloque("NO CAMBIAR", no_cambiar),
-      bloque("NEGATIVE", negative),
+      bloque("PRESERVE", preserve),
+      bloque("AVOID", avoid),
     ].join("\n\n");
   }, [contrato]);
 

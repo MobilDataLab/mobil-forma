@@ -1,68 +1,51 @@
 import type { CondicionesToma, Ubicacion } from "./tipos";
-import {
-  ESCUELAS, REFERENCIAS_FOTO, ENCUENTROS_URBANOS, TECTONICAS, SUSTENTABILIDADES,
-  ACENTOS_MATERIALES, LUCES_EDITORIALES,
-} from "./vocabulario";
+import { VOCAB } from "./vocabulario.generated";
 import MapaUbicacion from "./MapaUbicacion";
 
-// Sentinela: vegetación/estación "auto" → el prompt usa lo inferido del clima.
-export const AUTO_CLIMA = "auto (del clima)";
+// Sentinela: vegetation/season "auto" → el prompt usa lo inferido del clima.
+// (Es un option_key real del Excel, no un literal especial.)
+export const AUTO_CLIMA = "auto";
 // Sentinela del dropdown: "Personalizado…" → habilita texto libre en cualquier eje.
 const CUSTOM = "__custom__";
 
-// Opciones por eje (etiquetas, no valores continuos: el modelo externo
-// interpreta mejor etiquetas que números exactos). La cámara/vista NO se elige:
-// viene bloqueada de la imagen (preset).
-const OPC: Record<keyof CondicionesToma, string[]> = {
-  // 1. Atmósfera
-  escuela: Object.keys(ESCUELAS),
-  luz: [...LUCES_EDITORIALES, "warm late-afternoon daylight", "soft morning light", "blue hour", "dramatic sunset", "midday sun"],
-  cielo: ["despejado", "nublado suave", "parcialmente nublado", "dramático con nubes"],
-  paletaTono: ["tierra / natural", "neutra", "cálida", "fría"],
-  sombras: ["difusas", "suaves", "marcadas", "largas", "sin sombra dura"],
-  // 2. Expresión arquitectónica
-  encuentroUrbano: Object.keys(ENCUENTROS_URBANOS),
-  tectonica: Object.keys(TECTONICAS),
-  materialGlobal: Object.keys(ACENTOS_MATERIALES),
-  // Acabado fusiona terminación + pátina (el desgaste que vale la pena conservar).
-  acabado: [
-    "mate, uso natural leve",
-    "mate, impecable",
-    "satinado, impecable",
-    "envejecido / con pátina",
-    "brillante",
-  ],
-  // 3. Contexto
-  sustentabilidad: Object.keys(SUSTENTABILIDADES),
-  vegetacion: [AUTO_CLIMA, "abundante", "media", "escasa / xerófita", "sin vegetación"],
-  estacion: [AUTO_CLIMA, "seco", "florecido", "otoño", "invierno"],
-  genteAutos: ["mínimos", "integrados", "sin gente", "alta actividad"],
-  // 4. Render
-  detalle: ["alto detalle", "detalle medio", "esquemático"],
-  referenciaFoto: Object.keys(REFERENCIAS_FOTO),
+// Mapa eje de la toma → param_key del Excel (clave en VOCAB). El <select> muestra
+// labelEs y su value es el option_key. La cámara/vista NO se elige: viene bloqueada.
+const PARAM: Record<keyof CondicionesToma, string> = {
+  register: "register",
+  light: "light",
+  sky: "sky",
+  colorGrade: "color_grade",
+  shadows: "shadows",
+  finish: "finish",
+  detail: "detail",
+  photoReference: "photo_reference",
+  people: "people",
+  urbanEdge: "urban_edge",
+  tectonics: "tectonics",
+  accent: "accent",
+  vegetation: "vegetation",
+  season: "season",
+  sustainability: "sustainability",
 };
 
 const GRUPOS: { titulo: string; campos: { key: keyof CondicionesToma; label: string }[] }[] = [
   { titulo: "Atmósfera", campos: [
-    { key: "escuela", label: "Escuela / registro" },
-    { key: "luz", label: "Luz" }, { key: "cielo", label: "Cielo" },
-    { key: "paletaTono", label: "Paleta de tono" }, { key: "sombras", label: "Sombras" },
+    { key: "register", label: "Registro / escuela" },
+    { key: "light", label: "Luz" }, { key: "sky", label: "Cielo" },
+    { key: "colorGrade", label: "Paleta de tono" }, { key: "shadows", label: "Sombras" },
+    { key: "finish", label: "Acabado" }, { key: "detail", label: "Detalle" },
+    { key: "people", label: "Gente y actividad" },
+    { key: "photoReference", label: "Referencia fotográfica" },
   ]},
   { titulo: "Expresión arquitectónica", campos: [
-    { key: "encuentroUrbano", label: "Encuentro urbano" },
-    { key: "tectonica", label: "Tectónica de fachada" },
-    { key: "materialGlobal", label: "Acento material" },
-    { key: "acabado", label: "Acabado" },
+    { key: "urbanEdge", label: "Encuentro urbano" },
+    { key: "tectonics", label: "Tectónica de fachada" },
+    { key: "accent", label: "Acento material" },
   ]},
   { titulo: "Contexto", campos: [
-    { key: "sustentabilidad", label: "Sustentabilidad visible" },
-    { key: "vegetacion", label: "Vegetación" },
-    { key: "estacion", label: "Estación" },
-    { key: "genteAutos", label: "Gente y autos" },
-  ]},
-  { titulo: "Render", campos: [
-    { key: "detalle", label: "Detalle" },
-    { key: "referenciaFoto", label: "Referencia fotográfica" },
+    { key: "vegetation", label: "Vegetación" },
+    { key: "season", label: "Estación" },
+    { key: "sustainability", label: "Sustentabilidad visible" },
   ]},
 ];
 
@@ -87,9 +70,10 @@ export default function PanelCondiciones({
     onToma({ [key]: value } as Partial<CondicionesToma>);
 
   const campo = (label: string, key: keyof CondicionesToma) => {
+    const opciones = VOCAB[PARAM[key]] ?? [];
     const valor = toma[key];
-    // Si el valor actual no está entre las opciones → modo personalizado (texto libre).
-    const esCustom = !OPC[key].includes(valor);
+    // Si el valor actual no es un option_key conocido → modo personalizado (texto libre).
+    const esCustom = !opciones.some((o) => o.key === valor);
     return (
       <div className="field rnd-field" key={key}>
         <label>{label}</label>
@@ -97,14 +81,14 @@ export default function PanelCondiciones({
           value={esCustom ? CUSTOM : valor}
           onChange={(e) => set(key, e.target.value === CUSTOM ? (esCustom ? valor : "") : e.target.value)}
         >
-          {OPC[key].map((o) => <option key={o} value={o}>{o}</option>)}
+          {opciones.map((o) => <option key={o.key} value={o.key}>{o.labelEs}</option>)}
           <option value={CUSTOM}>✏️ Personalizado…</option>
         </select>
         {esCustom && (
           <input
             type="text"
             className="rnd-campo-libre"
-            placeholder="Escribe un valor a mano…"
+            placeholder="Escribe la instrucción en inglés a mano…"
             value={valor}
             onChange={(e) => set(key, e.target.value)}
           />
@@ -124,7 +108,7 @@ export default function PanelCondiciones({
               {p.nombre}
             </button>
           ))}
-          <span className="rnd-perfil-hint">aplica luz, paleta, escuela y estilo de una vez</span>
+          <span className="rnd-perfil-hint">aplica luz, paleta, registro y estilo de una vez</span>
         </div>
       </div>
 

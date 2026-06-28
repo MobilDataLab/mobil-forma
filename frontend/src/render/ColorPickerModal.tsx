@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ColorCanonico } from "../PaletaColores";
 import type { UsoDetectado } from "./tipos";
-import { materialidadDe } from "./materialidad";
+import { defaultMaterialKey } from "./materialidad.generated";
 
 // Convierte [r,g,b] a "#rrggbb".
 function rgbToHex(r: number, g: number, b: number): string {
@@ -72,7 +72,7 @@ export default function ColorPickerModal({
     if (modo === "funcion") {
       onAgregar({
         funcion, hex, pct: 0, confirmado: true,
-        materialidad: materialidadDe(funcion), origen: "manual",
+        materialidad: defaultMaterialKey(funcion), origen: "manual",
       });
     } else {
       onAgregar({

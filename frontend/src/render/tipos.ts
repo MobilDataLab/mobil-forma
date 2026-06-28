@@ -10,7 +10,9 @@ export type UsoDetectado = {
   hex: string;         // del motor o pickeado de la imagen
   pct: number;         // % de área (entero); 0 si fue agregado a mano
   confirmado: boolean; // lo controla el checkbox del usuario (default true)
-  materialidad: string; // opción de materialidad elegida o texto libre
+  // option_key de la materialidad elegida (de materialidad.generated.ts) o, en uso
+  // libre / "Personalizado…", texto crudo en inglés escrito por el usuario.
+  materialidad: string;
   // Origen: "auto" = detectado por el motor; "manual" = pickeado/agregado por el usuario.
   origen?: "auto" | "manual";
   // Uso libre: la materialidad NO se valida contra el banco de la función (texto del usuario).
@@ -31,29 +33,30 @@ export type InspeccionImagen = {
   alto: number;
 };
 
-// Capa "toma" → lo que cambia en cada render. Reestructurada con enfoque
-// arquitectónico: la cámara/vista/geometría vienen BLOQUEADAS de la imagen (preset),
-// por eso NO hay ejes de cámara/lente/fondo. La "escuela" engloba estilo+postproceso.
+// Capa "toma" → lo que cambia en cada render. Cada eje guarda el **option_key**
+// (id estable del Excel), NUNCA el texto. El texto ES (label) y la prosa EN se
+// resuelven desde vocabulario.generated.ts por option_key. La cámara/vista/geometría
+// vienen BLOQUEADAS de la imagen (preset): no hay ejes que las cambien.
+// Las claves espejan los param_key del Excel (hoja `config`).
 export type CondicionesToma = {
-  // 1. Atmósfera (la escuela define el registro; luz/cielo/paleta lo concretan)
-  escuela: string;        // registro / atmósfera (editorial, documental, etc.)
-  luz: string;            // condición lumínica
-  cielo: string;
-  paletaTono: string;     // grade general (tierra / cálida / fría / neutra)
-  sombras: string;
+  // 1. Atmósfera
+  register: string;       // registro atmosférico (param_key: register)
+  light: string;          // condición lumínica (light)
+  sky: string;            // cielo (sky)
+  colorGrade: string;     // grade general (color_grade)
+  shadows: string;        // sombras (shadows)
+  finish: string;         // acabado + pátina (finish)
+  detail: string;         // nivel de detalle (detail)
+  photoReference: string; // cualidad de fotografía de referencia (photo_reference)
+  people: string;         // gente y actividad (people)
   // 2. Expresión arquitectónica
-  encuentroUrbano: string;// cómo el edificio toca la ciudad — ADN Mobil
-  tectonica: string;      // profundidad / expresión de fachada
-  materialGlobal: string; // acento material del conjunto (banco tectónico)
-  acabado: string;        // terminación + pátina (mate/satinado/envejecido…)
+  urbanEdge: string;      // cómo el edificio toca la ciudad — ADN Mobil (urban_edge)
+  tectonics: string;      // profundidad / expresión de fachada (tectonics)
+  accent: string;         // acento material del conjunto (accent)
   // 3. Contexto
-  sustentabilidad: string;// estrategia sustentable visible
-  vegetacion: string;     // "auto (del clima)" u override
-  estacion: string;       // "auto (del clima)" u override
-  genteAutos: string;
-  // 4. Render
-  detalle: string;        // nivel de detalle
-  referenciaFoto: string; // cualidad de fotografía de referencia (opcional)
+  vegetation: string;     // densidad de vegetación o "auto" (vegetation)
+  season: string;         // estación o "auto" (season)
+  sustainability: string; // estrategia sustentable visible (sustainability)
 };
 
 // Ubicación elegida en el mapa (Leaflet). Alimenta location/coords del JSON.
@@ -83,75 +86,52 @@ export type ElementoProyecto = {
   role?: string;        // rol urbano (editable, opcional)
 };
 
-// Contrato JSON de salida — estructurado por dominio (espejo de referencia).
-export type RenderContract = {
-  task: string;
-  source: string;
-  image_role: string;
-  interpretation_mode: string;
+// Un elemento del programa en el contrato v2: color → uso → material (sin re-describir
+// geometría). El material es la prosa EN resuelta desde el option_key.
+export type ElementoPrograma = {
+  color: string;
+  use: string;
+  material: string;
+};
 
-  // Cámara bloqueada: la vista viene de la imagen (preset).
-  camera: {
-    type: string;
-    framing: string;
+// Contrato JSON de salida v2 — prosa-primero, en capas (espejo de la hoja
+// "JSON (ejemplo Batuco)" del Excel). El `prompt` es el protagonista; `locked`/
+// `preserve` reemplazan a image_role/camera/no_cambiar (geometry-lock ≤2 menciones);
+// los negativos migran mayormente a `preserve` (positivo). `_meta_mobil` es
+// documentación Mobil que el modelo NO lee.
+export type RenderContractV2 = {
+  meta: { version: string; updated: string; intent: string };
+  prompt: string;
+  locked: {
+    role: string;
+    geometry_and_camera: string;
     aspect_ratio: string;
-    camera_lock: boolean;
   };
-
-  // Contexto urbano-territorial inferido (ubicación + clima + escena detectada).
-  location: { place: string; lat?: number; lng?: number };
-  context: {
-    territory: string;
+  program: {
+    elements: ElementoPrograma[];
+    accent?: string;
+  };
+  scene: {
+    place: string;
     climate: string;
-    landscape_character: string;
-    existing_buildings: string;
-    roads: string;
+    context: string;
     vegetation: string;
+    urban_edge: string;
+    tectonics: string;
   };
-
-  // Elementos del proyecto: un objeto por uso confirmado (no un legend plano).
-  project_elements: ElementoProyecto[];
-  // Compat: legend plano hex→texto (lo consumen flujos antiguos).
-  color_legend: Record<string, string>;
-
-  // Intención de diseño (ADN Mobil) derivada de los ejes arquitectónicos.
-  design_intent: {
-    city_relation: string;
-    user_experience: string;
-    wellbeing: string;
-    urban_identity: string;
-  };
-
-  // Render: prosa primaria + negativos + lista explícita de "no cambiar".
-  render_prompt: {
-    prompt: string;
-    negative: string[];
-    no_cambiar: string[];
-  };
-
-  // Métricas/criterios (data, sustentabilidad, constructabilidad).
-  data_sustainability_constructability: {
-    data: string[];
-    sustainability: string[];
-    constructability: string[];
-  };
-
-  // Capa técnica de respaldo (ejes de la toma, estructurados).
-  render_params: {
-    school: string;
-    light: string;
+  atmosphere: {
+    register: string;
+    light: { type: string; direction: string; intensity: string; color_temperature: string };
     sky: string;
     shadows: string;
     color_grade: string;
-    urban_edge: string;
-    tectonics: string;
-    material_accent: string;
     finish: string;
-    sustainability: string;
-    vegetation: string;
-    season: string;
-    people_and_cars: string;
-    detail: string;
-    photo_reference: string;
+    people: string;
+  };
+  preserve: string[];
+  avoid: string[];
+  _meta_mobil: {
+    design_intent: Record<string, string>;
+    data_sustainability_constructability: Record<string, string[]>;
   };
 };

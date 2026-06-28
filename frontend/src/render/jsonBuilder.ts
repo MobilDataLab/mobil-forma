@@ -1,27 +1,24 @@
-import type { UsoDetectado, Preset, CondicionesToma, RenderContract, Ubicacion } from "./tipos";
-import {
-  ESCUELAS, REFERENCIAS_FOTO, ENCUENTROS_URBANOS, TECTONICAS, SUSTENTABILIDADES,
-  ACENTOS_MATERIALES,
-} from "./vocabulario";
+import type {
+  UsoDetectado, Preset, CondicionesToma, RenderContractV2, Ubicacion, ElementoPrograma,
+} from "./tipos";
+import { PROMPT_EN, LUZ_DERIVADA } from "./vocabulario.generated";
+import { promptMaterial } from "./materialidad.generated";
 
-// Sentinela de "auto (del clima)" para vegetación/estación (igual que en el panel).
-const AUTO_CLIMA = "auto (del clima)";
+// option_key sentinela: vegetation/season "auto" → se usa lo inferido del clima.
+const AUTO = "auto";
 
-// Negativos base (constantes Forma): geometría/cámara/contexto que NO debe cambiar,
-// más guardrails anti-CGI para empujar el resultado a registro arquitectónico.
-const NEGATIVOS_BASE = [
-  "no cambiar la geometría, las proporciones ni la composición de los volúmenes",
-  "no mover ni alterar el punto de vista / la cámara",
-  "no reinterpretar el color plano como decoración, textura impresa ni grafiti",
-  "no convertir los volúmenes blancos de contexto en edificios de color",
-  "no agregar edificios, pisos ni volúmenes que no estén en la imagen",
-  // Anti-CGI / anti-look inmobiliario
-  "keep verticals corrected (no keystoning / no converging verticals)",
-  "no plastic, oversaturated or videogame-CGI look",
-  "no fake lens flare, no HDR halos, no glowing edges",
-  "no stock-looking rigid people or copy-paste trees",
-  "no commercial real-estate gloss; restrained architectural palette",
-];
+// Versión del contrato (doc). Fecha fija de corte de generación del esquema.
+const META_VERSION = "2.0";
+const META_UPDATED = "2026-06-28";
+
+// Resuelve la prosa EN de un eje por option_key. Si la clave existe en PROMPT_EN
+// se usa su valor (puede ser "" para none/auto); si no existe, es texto libre del
+// usuario ("Personalizado…") → se usa tal cual (cae en inglés si así lo escribió).
+function prosa(param: string, key: string): string {
+  const dic = PROMPT_EN[param];
+  if (dic && key in dic) return dic[key];
+  return key;
+}
 
 // Infiere la tipología (en inglés) desde el conjunto de usos confirmados.
 function tipologia(usos: UsoDetectado[]): string {
@@ -37,16 +34,27 @@ function tipologia(usos: UsoDetectado[]): string {
   return "architectural project";
 }
 
-// Une la materialidad de cada uso en prosa: "Residencial Útil as exposed brick; ...".
+// Materialidad de un uso → prosa EN. Usa el banco por función (option_key) y cae
+// al texto crudo si es uso libre / personalizado.
+function materialProsa(u: UsoDetectado): string {
+  return promptMaterial(u.funcion, u.materialidad);
+}
+
+// Une la materialidad de cada uso en prosa: "Residencial Útil as exposed brick; …".
 function materialidadEnProsa(usos: UsoDetectado[]): string {
   return usos
-    .map((u) => `${u.funcion.replace(/Util/g, "Útil").replace(/Comun/g, "Común")} as ${u.materialidad}`)
+    .map((u) => `${conTilde(u.funcion)} as ${materialProsa(u)}`)
     .join("; ");
 }
 
-// Compone el brief arquitectónico en prosa atmosférica editorial desde las selecciones.
-// Capa primaria del contrato (el campo que más rinde en Gemini/GPT-image).
-// La cámara/vista/geometría se afirman BLOQUEADAS (preset): no hay ejes que las cambien.
+function conTilde(funcion: string): string {
+  return funcion.replace(/Util/g, "Útil").replace(/Comun/g, "Común");
+}
+
+// Compone el brief arquitectónico en prosa, 100% inglés, desde los option_key elegidos.
+// Capa primaria del contrato (el campo que más rinde en Gemini/GPT-image). El opener
+// usa el REGISTER elegido (no "Editorial" hardcodeado). people + detail entran a la
+// prosa (ya no son controles inertes). La geometría/cámara se afirman bloqueadas (preset).
 export function componerPrompt(
   usos: UsoDetectado[],
   preset: Preset,
@@ -56,210 +64,191 @@ export function componerPrompt(
   const lugar = ubic.etiqueta || preset.location;
   const especies = preset.vegetacion.especies.join(", ");
   const sotobosque = preset.vegetacion.sotobosque.join(", ");
-  // Vegetación/estación: "auto" → lo inferido del clima; override → texto del usuario.
-  const estacionTxt = toma.estacion === AUTO_CLIMA ? "" : `, ${toma.estacion}`;
-  const densVeg = toma.vegetacion === AUTO_CLIMA ? "" : `${toma.vegetacion} `;
 
-  // Traduce una opción a su prosa. Si la clave existe en el diccionario, usa su
-  // valor (puede ser "" para opciones tipo "ninguna"); si no existe, es texto
-  // libre del usuario ("Personalizado…") → se usa tal cual.
-  const vocab = (dic: Record<string, string>, val: string): string =>
-    val in dic ? dic[val] : val;
+  // Override de vegetación/estación: "auto" → lo inferido del clima; resto → su prosa.
+  const vegOverride = toma.vegetation === AUTO ? "" : `${prosa("vegetation", toma.vegetation)}; `;
+  const seasonTxt = toma.season === AUTO ? "" : `, ${prosa("season", toma.season)}`;
 
-  const escuela = vocab(ESCUELAS, toma.escuela);
-  const refFoto = vocab(REFERENCIAS_FOTO, toma.referenciaFoto);
-  const encuentro = vocab(ENCUENTROS_URBANOS, toma.encuentroUrbano);
-  const tecto = vocab(TECTONICAS, toma.tectonica);
-  const acento = vocab(ACENTOS_MATERIALES, toma.materialGlobal);
-  const sust = vocab(SUSTENTABILIDADES, toma.sustentabilidad);
+  const register = prosa("register", toma.register);
+  const light = prosa("light", toma.light);
+  const sky = prosa("sky", toma.sky);
+  const grade = prosa("color_grade", toma.colorGrade);
+  const shadows = prosa("shadows", toma.shadows);
+  const finish = prosa("finish", toma.finish);
+  const detail = prosa("detail", toma.detail);
+  const people = prosa("people", toma.people);
+  const photoRef = prosa("photo_reference", toma.photoReference);
+  const urbanEdge = prosa("urban_edge", toma.urbanEdge);
+  const tectonics = prosa("tectonics", toma.tectonics);
+  const accent = prosa("accent", toma.accent);
+  const sust = prosa("sustainability", toma.sustainability);
 
   const partes: string[] = [];
 
+  // 1. Opener: registro elegido + tipología + lugar + clima.
   partes.push(
-    `Editorial architectural visualization of a ${tipologia(usos)} in ${lugar} (${preset.clima} climate).`
+    `${cap(register)} visualization of a ${tipologia(usos)} in ${lugar} (${preset.clima} climate).`
   );
-  // El preset: la imagen manda la geometría y el punto de vista.
+  // 2. Geometry-lock (mención 1/2 — la otra vive en `locked`).
   partes.push(
-    "Treat the source image as the locked design: keep its exact geometry, proportions, volumes and camera viewpoint unchanged — this is the project, only its materiality and atmosphere are being rendered."
+    "Treat the source image as locked geometry, camera and aspect ratio — only materiality and atmosphere are rendered."
   );
+  // 3. Programa: color → materialidad real.
+  partes.push(`Translate each color into its real material: ${materialidadEnProsa(usos)}.`);
+  if (accent) partes.push(`Give the whole composition ${accent}.`);
+  // 4. Encuentro urbano + tectónica.
+  partes.push(`The building meets the city through ${urbanEdge}, presenting ${tectonics}.`);
+  // 5. Vegetación nativa del sitio.
   partes.push(
-    `Translate each color of the legend into its real materiality: ${materialidadEnProsa(usos)}.`
+    cap(`${vegOverride}vegetation native to the site (${especies}${seasonTxt}); ground with ${sotobosque}.`)
   );
-  if (acento) partes.push(`Give the whole composition ${acento}.`);
-  // Atmósfera / escuela + luz / sombras / cielo + grade + acabado
+  // 6. Atmósfera: luz / cielo / sombras / grade / acabado.
   partes.push(
-    `${escuela}: ${toma.luz}, ${toma.sombras} shadows, ${toma.cielo} sky; ${toma.paletaTono} color grade; ${toma.acabado} finish.`
+    `${cap(light)}, ${sky}, ${shadows}; ${grade}; ${finish}.`
   );
-  if (refFoto) partes.push(`Render ${refFoto}.`);
-  // ADN urbano + tectónica
-  partes.push(`The building meets the city through ${encuentro}.`);
-  partes.push(`Façade with ${tecto}.`);
-  if (sust) partes.push(`Visible sustainability strategy: ${sust}.`);
-  // Vegetación (densidad opcional) + escala humana
+  // 7. Detalle + gente (controles ahora activos).
+  partes.push(`${cap(detail)}; ${people}.`);
+  if (sust) partes.push(`Visible sustainability: ${sust}.`);
+  if (photoRef) partes.push(`Rendered ${photoRef}.`);
+  // 8. Cierre: constraints en positivo.
   partes.push(
-    `${densVeg}vegetation native to the site (${especies}${estacionTxt}); ground with ${sotobosque}.`
-  );
-  partes.push("Human figures as silhouettes for scale, not stock characters.");
-  partes.push(
-    "Corrected verticals, restrained architectural palette, subtle atmospheric depth. White volumes stay as neutral existing context."
+    "Keep verticals corrected, materials matte and true-to-life, white volumes as neutral existing context."
   );
 
   return partes.join(" ");
 }
 
-// Texto del eje (clave de vocabulario → prosa; o texto libre tal cual).
-const vocab = (dic: Record<string, string>, val: string): string =>
-  val in dic ? dic[val] : val;
-
-// Convierte un uso confirmado en un elemento de proyecto estructurado.
-function elementoDe(u: UsoDetectado): import("./tipos").ElementoProyecto {
-  const use = u.funcion.replace(/Util/g, "Útil").replace(/Comun/g, "Común");
-  return {
-    color: u.hex,
-    use,
-    description: u.materialidad,
-    ...(u.altura ? { height: u.altura } : {}),
-    ...(u.distribucion ? { distribution: u.distribucion } : {}),
-    ...(u.rol ? { role: u.rol } : {}),
-  };
+// Capitaliza la primera letra (para abrir frases con prosa que viene en minúscula).
+function cap(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// Intención de diseño (ADN Mobil) derivada de los ejes + plantilla editorial.
-function designIntent(toma: CondicionesToma): RenderContract["design_intent"] {
-  const encuentro = vocab(ENCUENTROS_URBANOS, toma.encuentroUrbano) || toma.encuentroUrbano;
-  const tecto = vocab(TECTONICAS, toma.tectonica) || toma.tectonica;
-  const sust = vocab(SUSTENTABILIDADES, toma.sustentabilidad);
+// Un uso confirmado → elemento de programa v2 (color → uso → material en prosa EN).
+function elementoDe(u: UsoDetectado): ElementoPrograma {
+  return { color: u.hex, use: conTilde(u.funcion), material: materialProsa(u) };
+}
+
+// Intención de diseño (ADN Mobil) — capa de documentación, el modelo no la lee.
+function designIntent(toma: CondicionesToma): Record<string, string> {
+  const urbanEdge = prosa("urban_edge", toma.urbanEdge);
+  const tectonics = prosa("tectonics", toma.tectonics);
+  const sust = prosa("sustainability", toma.sustainability);
   return {
-    city_relation:
-      `Build an image of a project integrated into its setting, meeting the city through ${encuentro}; ` +
-      "avoid buildings reading as isolated objects.",
+    city:
+      `Project integrated into its setting, meeting the city through ${urbanEdge}; ` +
+      "not an isolated object.",
     user_experience:
-      "Prioritise clear pedestrian routes, interior green areas, active edges and visual continuity toward the surroundings.",
-    wellbeing:
-      "Reinforce shade, vegetation, views, human scale and shared spaces between buildings.",
+      "Clear pedestrian routes, interior green areas, active edges, visual continuity to the surroundings.",
+    wellbeing: "Shade, vegetation, views, human scale and shared spaces between buildings.",
     urban_identity:
-      `A recognisable Mobil-register project: ${tecto}${sust ? `, with ${sust}` : ""}, ` +
-      "integrated with the topography and the vegetal mass.",
+      `Recognisable Mobil register: presenting ${tectonics}` +
+      `${sust ? `, with ${sust}` : ""}, integrated with topography and vegetal mass.`,
   };
 }
 
-// Lista explícita de "no cambiar" (lo que viene bloqueado de la imagen).
-const NO_CAMBIAR = [
-  "encuadre y relación de aspecto de la imagen",
-  "punto de vista / cámara",
-  "posición, altura y proporción de cada volumen",
-  "trazado de calles y accesos",
-  "topografía y fondo",
-  "distribución general de la vegetación estructural",
-  "volúmenes blancos de contexto (se mantienen neutros)",
-];
-
-// Criterios de data / sustentabilidad / constructabilidad (plantilla editable).
-function dataSustConst(
-  toma: CondicionesToma,
-  especies: string
-): RenderContract["data_sustainability_constructability"] {
-  const sust = vocab(SUSTENTABILIDADES, toma.sustentabilidad);
+// Data / sustentabilidad / constructabilidad — capa de documentación.
+function dataSustConst(toma: CondicionesToma, especies: string): Record<string, string[]> {
+  const sust = prosa("sustainability", toma.sustainability);
   return {
     data: [
-      "evaluar densidad por hectárea",
-      "medir distancia caminable entre edificios, accesos y servicios",
-      "evaluar asoleamiento y sombra proyectada entre bloques",
+      "evaluate density per hectare",
+      "measure walkable distance between buildings, accesses and services",
+      "evaluate sunlight and shadow cast between blocks",
     ],
     sustainability: [
-      `usar vegetación nativa o adaptada al lugar (${especies})`,
-      "mantener masa vegetal existente cuando sea posible",
-      "incorporar áreas permeables y drenaje superficial",
-      ...(sust ? [`estrategia visible: ${sust}`] : []),
+      `use vegetation native or adapted to the site (${especies})`,
+      "keep existing vegetal mass where possible",
+      "incorporate permeable areas and surface drainage",
+      ...(sust ? [`visible strategy: ${sust}`] : []),
     ],
     constructability: [
-      "mantener bloques simples y repetibles",
-      "ordenar accesos y vialidades internas para fases de obra",
-      "priorizar sistemas de fachada repetibles y de bajo mantenimiento",
+      "keep blocks simple and repeatable",
+      "order accesses and internal roads for construction phasing",
+      "favour repeatable, low-maintenance façade systems",
     ],
   };
 }
 
-// Ensambla el contrato estructurado por dominio (espejo de referencia).
+// Constraints en POSITIVO (preserve). Geometry-lock aparece aquí una sola vez (mención 2/2).
+const PRESERVE_BASE = [
+  "exact geometry, camera viewpoint and aspect ratio of the input image",
+  "white context volumes kept neutral and secondary",
+  "street layout, accesses and background topography",
+  "structural distribution of the existing vegetation",
+  "materials matte and true-to-life, corrected verticals",
+];
+
+// Ensambla el contrato v2 (prosa-primero, por capas).
 export function construirJSON(
   usosConfirmados: UsoDetectado[],
   preset: Preset,
   toma: CondicionesToma,
   ubicacion: Ubicacion
-): RenderContract {
-  const color_legend: Record<string, string> = {};
-  for (const u of usosConfirmados) {
-    color_legend[u.hex] = `${u.funcion} — ${u.materialidad}`;
-  }
-
+): RenderContractV2 {
   const especies = preset.vegetacion.especies.join(", ");
   const sotobosque = preset.vegetacion.sotobosque.join(", ");
   const lugar = ubicacion.etiqueta || preset.location;
 
-  // Negativos derivados del preset (clima): evita vegetación ajena al lugar.
-  const negDerivados =
-    preset.clima.includes("semiárido") || preset.clima.includes("árido")
-      ? ["no agregar vegetación tropical, palmeras ni césped húmedo exuberante"]
-      : [];
+  const accent = prosa("accent", toma.accent);
+  const luz = LUZ_DERIVADA[toma.light] ?? { direction: "", intensity: "", colorTemperature: "" };
+
+  // avoid: solo lo que debe ser negativo (2–3 ítems). El resto va en preserve (positivo).
+  const avoid: string[] = [];
+  if (preset.clima.includes("semiárido") || preset.clima.includes("árido")) {
+    avoid.push("tropical vegetation or palm trees");
+  }
+  avoid.push("commercial real-estate gloss or oversaturation");
+
+  const elements: ElementoPrograma[] = usosConfirmados.map(elementoDe);
 
   return {
-    task: "render arquitectónico controlado a partir de un volumen coloreado de Forma",
-    source: "captura de Autodesk Forma",
-    image_role:
-      "la imagen es un modelo volumétrico de Forma; cada color plano codifica un USO, no un material final",
-    interpretation_mode: "traducir color → uso → materialidad, conservando la geometría exacta",
-
-    camera: {
-      type: "vista de la imagen (no inferir nueva cámara)",
-      framing: "encuadre exacto de la captura de Forma",
-      aspect_ratio: "el de la imagen original",
-      camera_lock: true,
+    meta: {
+      version: META_VERSION,
+      updated: META_UPDATED,
+      intent: `${prosa("register", toma.register)} — architectural communication piece`,
     },
-
-    location: { place: lugar, lat: ubicacion.lat, lng: ubicacion.lng },
-    context: {
-      territory: `entorno propio de ${lugar}`,
+    prompt: componerPrompt(usosConfirmados, preset, toma, ubicacion),
+    locked: {
+      role: "Forma color-coded massing: each flat color is a USE, not a final material",
+      geometry_and_camera: "keep exact volumes, proportions, positions and viewpoint",
+      aspect_ratio: "do not change the input image aspect ratio",
+    },
+    program: {
+      elements,
+      ...(accent ? { accent } : {}),
+    },
+    scene: {
+      place: lugar,
       climate: preset.clima,
-      landscape_character: `paisaje ${preset.clima}, con vegetación nativa (${especies})`,
-      existing_buildings: "volúmenes blancos: contexto existente, mantener neutros y secundarios",
-      roads: "calles grises: vialidades existentes o internas, conservar trazado",
-      vegetation: `árboles y sotobosque propios del lugar: ${especies}; suelo: ${sotobosque}`,
+      context: "volumes set among a native vegetal mass and gentle topography, not isolated objects",
+      vegetation: `native ${especies}; ground with ${sotobosque}`,
+      urban_edge: prosa("urban_edge", toma.urbanEdge),
+      tectonics: prosa("tectonics", toma.tectonics),
     },
-
-    project_elements: usosConfirmados.map(elementoDe),
-    color_legend,
-
-    design_intent: designIntent(toma),
-
-    render_prompt: {
-      prompt: componerPrompt(usosConfirmados, preset, toma, ubicacion),
-      negative: [...NEGATIVOS_BASE, ...negDerivados],
-      no_cambiar: NO_CAMBIAR,
+    atmosphere: {
+      register: prosa("register", toma.register),
+      light: {
+        type: prosa("light", toma.light),
+        direction: luz.direction,
+        intensity: luz.intensity,
+        color_temperature: luz.colorTemperature,
+      },
+      sky: prosa("sky", toma.sky),
+      shadows: prosa("shadows", toma.shadows),
+      color_grade: prosa("color_grade", toma.colorGrade),
+      finish: prosa("finish", toma.finish),
+      people: prosa("people", toma.people),
     },
-
-    data_sustainability_constructability: dataSustConst(toma, especies),
-
-    render_params: {
-      school: toma.escuela,
-      light: toma.luz,
-      sky: toma.cielo,
-      shadows: toma.sombras,
-      color_grade: toma.paletaTono,
-      urban_edge: toma.encuentroUrbano,
-      tectonics: toma.tectonica,
-      material_accent: toma.materialGlobal,
-      finish: toma.acabado,
-      sustainability: toma.sustentabilidad,
-      vegetation: toma.vegetacion === AUTO_CLIMA ? `auto: ${especies}` : toma.vegetacion,
-      season: toma.estacion === AUTO_CLIMA ? "auto (clima)" : toma.estacion,
-      people_and_cars: toma.genteAutos,
-      detail: toma.detalle,
-      photo_reference: toma.referenciaFoto,
+    preserve: PRESERVE_BASE,
+    avoid,
+    _meta_mobil: {
+      design_intent: designIntent(toma),
+      data_sustainability_constructability: dataSustConst(toma, especies),
     },
   };
 }
 
 // Serializa indentado, listo para clipboard.
-export function aTexto(contract: RenderContract): string {
+export function aTexto(contract: RenderContractV2): string {
   return JSON.stringify(contract, null, 2);
 }
