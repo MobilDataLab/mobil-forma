@@ -120,6 +120,17 @@ export const VOCAB: Record<string, Opcion[]> = {
     { key: "biophilic", labelEs: "biofílico", promptEn: "biophilic design with passive shading and natural materials", isDefault: false },
     { key: "green_walls", labelEs: "muros verdes", promptEn: "green walls / vegetal façade", isDefault: false },
     { key: "suds", labelEs: "SUDS", promptEn: "rainwater harvesting / sustainable urban drainage", isDefault: false }
+  ],
+  "preserve": [
+    { key: "geometria_camara", labelEs: "geometría, cámara y relación de aspecto exactas de la imagen", promptEn: "exact geometry, camera viewpoint and aspect ratio of the input image", isDefault: true },
+    { key: "contexto_blanco", labelEs: "volúmenes blancos de contexto neutros y secundarios", promptEn: "white context volumes kept neutral and secondary", isDefault: true },
+    { key: "trazado_calles", labelEs: "trazado de calles, accesos y topografía de fondo", promptEn: "street layout, accesses and background topography", isDefault: true },
+    { key: "vegetacion_estructural", labelEs: "distribución estructural de la vegetación existente", promptEn: "structural distribution of the existing vegetation", isDefault: true },
+    { key: "materiales_verticales", labelEs: "materiales mate y realistas, verticales corregidas", promptEn: "materials matte and true-to-life, corrected verticals", isDefault: true }
+  ],
+  "avoid": [
+    { key: "vegetacion_tropical", labelEs: "vegetación tropical o palmeras", promptEn: "tropical vegetation or palm trees", isDefault: true },
+    { key: "gloss_inmobiliario", labelEs: "brillo inmobiliario comercial o sobresaturación", promptEn: "commercial real-estate gloss or oversaturation", isDefault: true }
   ]
 };
 
@@ -239,6 +250,17 @@ export const PROMPT_EN: Record<string, Record<string, string>> = {
     "biophilic": "biophilic design with passive shading and natural materials",
     "green_walls": "green walls / vegetal façade",
     "suds": "rainwater harvesting / sustainable urban drainage"
+  },
+  "preserve": {
+    "geometria_camara": "exact geometry, camera viewpoint and aspect ratio of the input image",
+    "contexto_blanco": "white context volumes kept neutral and secondary",
+    "trazado_calles": "street layout, accesses and background topography",
+    "vegetacion_estructural": "structural distribution of the existing vegetation",
+    "materiales_verticales": "materials matte and true-to-life, corrected verticals"
+  },
+  "avoid": {
+    "vegetacion_tropical": "tropical vegetation or palm trees",
+    "gloss_inmobiliario": "commercial real-estate gloss or oversaturation"
   }
 };
 
@@ -270,6 +292,16 @@ const DEFAULTS: Record<string, string> = {
   "sustainability": "none"
 };
 
+// Grupos multi-select (preserve/avoid): option_keys activas por defecto.
+const MULTI_DEFAULTS: Record<string, string[]> = {
+  "preserve": ["geometria_camara", "contexto_blanco", "trazado_calles", "vegetacion_estructural", "materiales_verticales"],
+  "avoid": ["vegetacion_tropical", "gloss_inmobiliario"]
+};
+
 export function defaultKey(param: string): string {
   return DEFAULTS[param] ?? "";
+}
+
+export function defaultKeys(param: string): string[] {
+  return MULTI_DEFAULTS[param] ?? [];
 }

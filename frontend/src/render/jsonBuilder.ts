@@ -169,14 +169,23 @@ function dataSustConst(toma: CondicionesToma, especies: string): Record<string, 
   };
 }
 
-// Constraints en POSITIVO (preserve). Geometry-lock aparece aquí una sola vez (mención 2/2).
-const PRESERVE_BASE = [
-  "exact geometry, camera viewpoint and aspect ratio of the input image",
-  "white context volumes kept neutral and secondary",
-  "street layout, accesses and background topography",
-  "structural distribution of the existing vegetation",
-  "materials matte and true-to-life, corrected verticals",
-];
+// option_key cuya inclusión depende del clima: "vegetación tropical" solo tiene
+// sentido evitarla en climas áridos/semiáridos (en otros, no aplica).
+const AVOID_CLIMA_GATED: Record<string, (clima: string) => boolean> = {
+  vegetacion_tropical: (clima) => clima.includes("semiárido") || clima.includes("árido"),
+};
+
+// Resuelve una lista de option_keys activas (preserve/avoid) a su prosa EN, aplicando
+// el filtro por clima. El orden lo manda el banco del Excel (PROMPT_EN[param]).
+function restriccionesEN(param: string, activas: string[], clima: string): string[] {
+  const dic = PROMPT_EN[param] ?? {};
+  const orden = Object.keys(dic);
+  return orden
+    .filter((k) => activas.includes(k))
+    .filter((k) => !AVOID_CLIMA_GATED[k] || AVOID_CLIMA_GATED[k](clima))
+    .map((k) => dic[k])
+    .filter(Boolean);
+}
 
 // Ensambla el contrato v2 (prosa-primero, por capas).
 export function construirJSON(
@@ -192,12 +201,10 @@ export function construirJSON(
   const accent = prosa("accent", toma.accent);
   const luz = LUZ_DERIVADA[toma.light] ?? { direction: "", intensity: "", colorTemperature: "" };
 
-  // avoid: solo lo que debe ser negativo (2–3 ítems). El resto va en preserve (positivo).
-  const avoid: string[] = [];
-  if (preset.clima.includes("semiárido") || preset.clima.includes("árido")) {
-    avoid.push("tropical vegetation or palm trees");
-  }
-  avoid.push("commercial real-estate gloss or oversaturation");
+  // preserve / avoid: prosa EN de las restricciones activas del banco (editadas en ES),
+  // con filtro por clima. Geometry-lock vive aquí una sola vez (mención 2/2).
+  const preserve = restriccionesEN("preserve", toma.preserve, preset.clima);
+  const avoid = restriccionesEN("avoid", toma.avoid, preset.clima);
 
   const elements: ElementoPrograma[] = usosConfirmados.map(elementoDe);
 
@@ -239,7 +246,7 @@ export function construirJSON(
       finish: prosa("finish", toma.finish),
       people: prosa("people", toma.people),
     },
-    preserve: PRESERVE_BASE,
+    preserve,
     avoid,
     _meta_mobil: {
       design_intent: designIntent(toma),

@@ -64,8 +64,13 @@ function validarYAgrupar(filas) {
     if (!param || !optKey) continue; // filas vacías / separadores
     const scope = String(f.scope ?? "").trim();
     const k = `${param}␟${scope}`;
-    if (!grupos.has(k)) grupos.set(k, { param, scope, opciones: [] });
-    grupos.get(k).opciones.push({
+    // multi=TRUE → grupo multi-select (preserve/avoid): puede haber varias activas
+    // por defecto. Si una sola fila del grupo lo marca, el grupo es multi.
+    const multi = esTrue(f.multi);
+    if (!grupos.has(k)) grupos.set(k, { param, scope, multi: false, opciones: [] });
+    const g = grupos.get(k);
+    if (multi) g.multi = true;
+    g.opciones.push({
       key: optKey,
       labelEs: String(f.label_es ?? "").trim(),
       promptEn: String(f.prompt_en ?? "").trim(),
@@ -77,7 +82,7 @@ function validarYAgrupar(filas) {
     });
   }
 
-  for (const { param, scope, opciones } of grupos.values()) {
+  for (const { param, scope, multi, opciones } of grupos.values()) {
     const etq = scope ? `${param} / ${scope}` : param;
     // option_key único
     const vistos = new Set();
@@ -85,9 +90,11 @@ function validarYAgrupar(filas) {
       if (vistos.has(o.key)) die(`option_key duplicado "${o.key}" en (${etq})`);
       vistos.add(o.key);
     }
-    // exactamente un default
+    // default: grupos multi-select aceptan ≥1 (activas por defecto); los demás, exactamente 1.
     const defs = opciones.filter((o) => o.isDefault);
-    if (defs.length !== 1) {
+    if (multi) {
+      if (defs.length < 1) die(`(${etq}) multi-select debe tener al menos un default=TRUE`);
+    } else if (defs.length !== 1) {
       die(`(${etq}) debe tener exactamente un default=TRUE; tiene ${defs.length}`);
     }
     // prompt_en no vacío salvo none/auto
@@ -116,9 +123,10 @@ function genVocabulario(grupos) {
   const vocabEntries = [];
   const promptEntries = [];
   const lightEntries = [];
-  const defaults = {};
+  const defaults = {};       // single-select: param → key
+  const multiDefaults = {};  // multi-select: param → key[] (activas por defecto)
 
-  for (const { param, opciones } of ejes) {
+  for (const { param, multi, opciones } of ejes) {
     const arr = opciones
       .map(
         (o) =>
@@ -130,7 +138,11 @@ function genVocabulario(grupos) {
     const pe = opciones.map((o) => `    ${q(o.key)}: ${q(o.promptEn)}`).join(",\n");
     promptEntries.push(`  ${q(param)}: {\n${pe}\n  }`);
 
-    defaults[param] = (opciones.find((o) => o.isDefault) ?? opciones[0]).key;
+    if (multi) {
+      multiDefaults[param] = opciones.filter((o) => o.isDefault).map((o) => o.key);
+    } else {
+      defaults[param] = (opciones.find((o) => o.isDefault) ?? opciones[0]).key;
+    }
 
     // Solo el eje light aporta derivación de luz.
     if (param === "light") {
@@ -146,6 +158,9 @@ function genVocabulario(grupos) {
 
   const defaultsLiteral = Object.entries(defaults)
     .map(([k, v]) => `  ${q(k)}: ${q(v)}`)
+    .join(",\n");
+  const multiDefaultsLiteral = Object.entries(multiDefaults)
+    .map(([k, v]) => `  ${q(k)}: [${v.map(q).join(", ")}]`)
     .join(",\n");
 
   return (
@@ -166,8 +181,15 @@ function genVocabulario(grupos) {
     "const DEFAULTS: Record<string, string> = {\n" +
     defaultsLiteral +
     "\n};\n\n" +
+    "// Grupos multi-select (preserve/avoid): option_keys activas por defecto.\n" +
+    "const MULTI_DEFAULTS: Record<string, string[]> = {\n" +
+    multiDefaultsLiteral +
+    "\n};\n\n" +
     "export function defaultKey(param: string): string {\n" +
     "  return DEFAULTS[param] ?? \"\";\n" +
+    "}\n\n" +
+    "export function defaultKeys(param: string): string[] {\n" +
+    "  return MULTI_DEFAULTS[param] ?? [];\n" +
     "}\n"
   );
 }

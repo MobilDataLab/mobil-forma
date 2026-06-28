@@ -8,9 +8,12 @@ export const AUTO_CLIMA = "auto";
 // Sentinela del dropdown: "Personalizado…" → habilita texto libre en cualquier eje.
 const CUSTOM = "__custom__";
 
+// Ejes single-select de la toma (excluye preserve/avoid, que son string[]).
+type EjeKey = Exclude<keyof CondicionesToma, "preserve" | "avoid">;
+
 // Mapa eje de la toma → param_key del Excel (clave en VOCAB). El <select> muestra
 // labelEs y su value es el option_key. La cámara/vista NO se elige: viene bloqueada.
-const PARAM: Record<keyof CondicionesToma, string> = {
+const PARAM: Record<EjeKey, string> = {
   register: "register",
   light: "light",
   sky: "sky",
@@ -28,9 +31,9 @@ const PARAM: Record<keyof CondicionesToma, string> = {
   sustainability: "sustainability",
 };
 
-const GRUPOS: { titulo: string; campos: { key: keyof CondicionesToma; label: string }[] }[] = [
+const GRUPOS: { titulo: string; campos: { key: EjeKey; label: string }[] }[] = [
   { titulo: "Atmósfera", campos: [
-    { key: "register", label: "Registro / escuela" },
+    { key: "register", label: "Estilo visual" },
     { key: "light", label: "Luz" }, { key: "sky", label: "Cielo" },
     { key: "colorGrade", label: "Paleta de tono" }, { key: "shadows", label: "Sombras" },
     { key: "finish", label: "Acabado" }, { key: "detail", label: "Detalle" },
@@ -38,7 +41,7 @@ const GRUPOS: { titulo: string; campos: { key: keyof CondicionesToma; label: str
     { key: "photoReference", label: "Referencia fotográfica" },
   ]},
   { titulo: "Expresión arquitectónica", campos: [
-    { key: "urbanEdge", label: "Encuentro urbano" },
+    { key: "urbanEdge", label: "Relación con la calle" },
     { key: "tectonics", label: "Tectónica de fachada" },
     { key: "accent", label: "Acento material" },
   ]},
@@ -69,7 +72,37 @@ export default function PanelCondiciones({
   const set = (key: keyof CondicionesToma, value: string) =>
     onToma({ [key]: value } as Partial<CondicionesToma>);
 
-  const campo = (label: string, key: keyof CondicionesToma) => {
+  // Toggle de una restricción (multi-select) en preserve/avoid: añade/quita su option_key.
+  const toggleMulti = (key: "preserve" | "avoid", optKey: string, on: boolean) => {
+    const actuales = toma[key];
+    const next = on ? [...actuales, optKey] : actuales.filter((k) => k !== optKey);
+    onToma({ [key]: next } as Partial<CondicionesToma>);
+  };
+
+  // Grupo de checkboxes en español para un banco multi-select (preserve / avoid).
+  const restricciones = (key: "preserve" | "avoid", titulo: string) => {
+    const opciones = VOCAB[key] ?? [];
+    const activas = toma[key];
+    return (
+      <div className="rnd-cond-cap" key={key}>
+        <span className="rnd-cap-tit">{titulo}</span>
+        <div className="rnd-restric-grid">
+          {opciones.map((o) => (
+            <label className="rnd-restric-item" key={o.key}>
+              <input
+                type="checkbox"
+                checked={activas.includes(o.key)}
+                onChange={(e) => toggleMulti(key, o.key, e.target.checked)}
+              />
+              <span>{o.labelEs}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const campo = (label: string, key: EjeKey) => {
     const opciones = VOCAB[PARAM[key]] ?? [];
     const valor = toma[key];
     // Si el valor actual no es un option_key conocido → modo personalizado (texto libre).
@@ -132,6 +165,10 @@ export default function PanelCondiciones({
           </div>
         </div>
       ))}
+
+      {/* Restricciones del render (banco editable en español → JSON en inglés) */}
+      {restricciones("preserve", "Restricciones — preservar")}
+      {restricciones("avoid", "Restricciones — evitar")}
     </div>
   );
 }

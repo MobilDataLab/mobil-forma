@@ -7,7 +7,7 @@ import { climaDesdeCoords } from "./clima";
 import TablaColores from "./TablaColores";
 import ColorPickerModal from "./ColorPickerModal";
 import PanelCondiciones from "./PanelCondiciones";
-import { defaultKey } from "./vocabulario.generated";
+import { defaultKey, defaultKeys } from "./vocabulario.generated";
 import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
 // Default = el option_key marcado isDefault de cada eje en el Excel (fuente de verdad).
@@ -30,6 +30,9 @@ const TOMA_DEFAULT: CondicionesToma = {
   vegetation: defaultKey("vegetation"),
   season: defaultKey("season"),
   sustainability: defaultKey("sustainability"),
+  // Restricciones (banco multi-select): arrancan con las activas por defecto.
+  preserve: defaultKeys("preserve"),
+  avoid: defaultKeys("avoid"),
 };
 
 // Perfiles de arranque: aplican un set coherente de ejes (por option_key) de una vez.
@@ -259,9 +262,9 @@ export default function RenderControlado({ paleta }: Props) {
           </div>
           <pre className="rnd-prompt">{promptText || "Confirma al menos un uso para generar el prompt."}</pre>
 
-          {/* 4a-bis. Restricciones (lo que NO debe cambiar + negativos) + copiar */}
+          {/* 4a-bis. Restricciones: vista previa en inglés (se editan en español arriba) */}
           <div className="rnd-json-head">
-            <span className="rnd-cap-tit">Restricciones del render</span>
+            <span className="rnd-cap-tit">Restricciones del render (vista previa en inglés)</span>
             <button className="btn-export" onClick={copiarRestricciones} disabled={!restriccionesText}>
               <IconoDescarga /> {copiadoRestric ? "¡Copiado!" : "Copiar restricciones"}
             </button>

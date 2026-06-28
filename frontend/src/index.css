@@ -737,6 +737,9 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .rnd-campo-libre { margin-top: 6px; width: 100%; padding: 7px 8px; border: 1px solid var(--blue); background: var(--blue-tint); font: 400 12px var(--bd); color: var(--ink); }
 .rnd-campo-libre:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
 .rnd-cond-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.rnd-restric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 16px; }
+.rnd-restric-item { display: flex; align-items: center; gap: 8px; font: 400 13px var(--bd); color: var(--ink); cursor: pointer; }
+.rnd-restric-item input { width: 15px; height: 15px; flex: 0 0 auto; cursor: pointer; }
 .rnd-field { gap: 6px; }
 .rnd-field select { width: 100%; padding: 9px 10px; border: 1px solid var(--gray-200); border-radius: 0; background: #fff; font: 400 13px var(--bd); color: var(--ink); }
 .rnd-field select:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
