@@ -50,13 +50,13 @@ export default function PanelReferencia({
           <ol className="rnd-ref-steps">
             <li>
               <div className="rnd-ref-step-head">
-                <span>Copia el extractor y pégalo en Gemini junto a tu foto de referencia.</span>
+                <span>Copia el extractor y pégalo en tu modelo con visión (ChatGPT, Gemini, Claude…) junto a tu foto de referencia.</span>
                 <button className="btn-export" onClick={copiarExtractor}>
                   <IconoDescarga /> {copiado ? "¡Copiado!" : "Copiar extractor"}
                 </button>
               </div>
             </li>
-            <li>Gemini devuelve un JSON con los parámetros de la foto.</li>
+            <li>El modelo devuelve un JSON con los parámetros de la foto.</li>
             <li>
               <span>Pega ese JSON aquí y aplícalo:</span>
               <textarea
@@ -75,7 +75,7 @@ export default function PanelReferencia({
             </li>
           </ol>
           <p className="rnd-ref-nota">
-            La foto NO se sube desde la app: tú la pasas a Gemini. Los valores entran en modo
+            La foto NO se sube desde la app: tú la pasas a tu modelo. Los valores entran en modo
             “Personalizado…”, así que puedes ajustarlos a mano después.
           </p>
         </div>

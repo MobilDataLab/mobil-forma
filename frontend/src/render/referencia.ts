@@ -1,8 +1,8 @@
-// "Capturar referencia" (round-trip Gemini, v3 del handoff): de una FOTO de referencia
-// (un render que gusta) se extraen sus parámetros atmosféricos y se vuelcan a la toma
-// en modo texto libre ("Personalizado…"). No sube nada: la app genera un prompt extractor
-// que el usuario pega en Gemini junto a su foto; Gemini devuelve un JSON; el usuario lo
-// pega de vuelta y se aplica al estado.
+// "Capturar referencia" (round-trip con un modelo de visión, v3 del handoff): de una FOTO
+// de referencia (un render que gusta) se extraen sus parámetros atmosféricos y se vuelcan
+// a la toma en modo texto libre ("Personalizado…"). No sube nada: la app genera un prompt
+// extractor que el usuario pega en su modelo (ChatGPT, Gemini, Claude…) junto a su foto;
+// el modelo devuelve un JSON; el usuario lo pega de vuelta y se aplica al estado.
 
 import type { CondicionesToma } from "./tipos";
 import { VOCAB } from "./vocabulario.generated";
@@ -67,7 +67,7 @@ export function aplicarReferencia(texto: string): ResultadoReferencia {
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
-  if (!limpio) return { ok: false, error: "Pega el JSON que devolvió Gemini." };
+  if (!limpio) return { ok: false, error: "Pega el JSON que devolvió el modelo." };
 
   let obj: unknown;
   try {
