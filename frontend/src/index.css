@@ -745,6 +745,20 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .rnd-restric-input:focus { outline: none; border-color: var(--brand, #2E74B5); }
 .rnd-restric-del { flex: 0 0 auto; }
 .rnd-restric-add { align-self: flex-start; margin-top: 2px; font: 600 12px var(--bd); }
+
+/* Capturar referencia (foto → parámetros) */
+.rnd-ref { border: 1px dashed var(--gray-200); padding: 12px 14px; }
+.rnd-ref-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; padding: 0; cursor: pointer; }
+.rnd-ref-chevron { color: var(--gray-400); font-size: 12px; }
+.rnd-ref-body { margin-top: 12px; }
+.rnd-ref-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font: 400 13px var(--bd); color: var(--ink); }
+.rnd-ref-step-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rnd-ref-textarea { width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 0; font: 400 12px var(--mono, monospace); color: var(--ink); resize: vertical; }
+.rnd-ref-actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+.rnd-ref-msg { font: 400 12px var(--bd); }
+.rnd-ref-msg.ok { color: #2e7d32; }
+.rnd-ref-msg.err { color: #c62828; }
+.rnd-ref-nota { margin: 12px 0 0; font: 400 11px var(--bd); color: var(--gray-400); }
 .rnd-field { gap: 6px; }
 .rnd-field select { width: 100%; padding: 9px 10px; border: 1px solid var(--gray-200); border-radius: 0; background: #fff; font: 400 13px var(--bd); color: var(--ink); }
 .rnd-field select:focus { outline: 2px solid var(--blue); outline-offset: -2px; }

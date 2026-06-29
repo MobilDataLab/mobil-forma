@@ -7,6 +7,7 @@ import { climaDesdeCoords } from "./clima";
 import TablaColores from "./TablaColores";
 import ColorPickerModal from "./ColorPickerModal";
 import PanelCondiciones from "./PanelCondiciones";
+import PanelReferencia from "./PanelReferencia";
 import { defaultKey } from "./vocabulario.generated";
 import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
@@ -244,7 +245,10 @@ export default function RenderControlado({ paleta }: Props) {
             onAbrirPicker={previewUrl ? () => setPickerAbierto(true) : undefined}
           />
 
-          {/* 3. Condiciones (ubicación → clima derivado + mapa + ejes de toma) */}
+          {/* 3a. Capturar referencia (foto → parámetros vía Gemini, en Personalizado) */}
+          <PanelReferencia onAplicar={(patch) => setToma((t) => ({ ...t, ...patch }))} />
+
+          {/* 3b. Condiciones (ubicación → clima derivado + mapa + ejes de toma) */}
           <PanelCondiciones
             climaInferido={preset.clima}
             toma={toma}
