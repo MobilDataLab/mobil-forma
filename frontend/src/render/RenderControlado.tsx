@@ -13,6 +13,8 @@ import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
 // Default = el option_key marcado isDefault de cada eje en el Excel (fuente de verdad).
 const TOMA_DEFAULT: CondicionesToma = {
+  // Origen del render base
+  source: defaultKey("source"),
   // Atmósfera
   register: defaultKey("register"),
   light: defaultKey("light"),
@@ -36,34 +38,6 @@ const TOMA_DEFAULT: CondicionesToma = {
   // "evitar tropical"). Si el usuario cambia la ubicación, puede editar la lista a mano.
   preserve: seedRestricciones("preserve", "semiárido mediterráneo"),
   avoid: seedRestricciones("avoid", "semiárido mediterráneo"),
-};
-
-// Perfiles de arranque: aplican un set coherente de ejes (por option_key) de una vez.
-const PERFILES: Record<string, { nombre: string; patch: Partial<CondicionesToma> }> = {
-  editorial: {
-    nombre: "Editorial / arquitectura",
-    patch: {
-      register: "editorial_atmospheric",
-      light: "soft_diffuse_overcast",
-      sky: "soft_overcast",
-      shadows: "soft_long",
-      colorGrade: "earthy_restrained",
-      people: "minimal_silhouettes",
-      finish: "matte_weathered",
-    },
-  },
-  comercial: {
-    nombre: "Comunicación comercial",
-    patch: {
-      register: "urban_narrative",
-      light: "raking_late",
-      sky: "clear",
-      shadows: "raking",
-      colorGrade: "warm_golden",
-      people: "integrated",
-      finish: "matte_new",
-    },
-  },
 };
 
 // Batuco por defecto (coincide con el preset).
@@ -253,8 +227,6 @@ export default function RenderControlado({ paleta }: Props) {
             climaInferido={preset.clima}
             toma={toma}
             ubicacion={ubicacion}
-            perfiles={PERFILES}
-            onPerfil={(id) => { const p = PERFILES[id]; if (p) setToma((t) => ({ ...t, ...p.patch })); }}
             onToma={(patch) => setToma((t) => ({ ...t, ...patch }))}
             onUbicacion={setUbicacion}
           />

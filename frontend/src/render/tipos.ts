@@ -39,6 +39,8 @@ export type InspeccionImagen = {
 // vienen BLOQUEADAS de la imagen (preset): no hay ejes que las cambien.
 // Las claves espejan los param_key del Excel (hoja `config`).
 export type CondicionesToma = {
+  // 0. Origen del render base (Forma / SketchUp / Rhino) → define locked.role del JSON.
+  source: string;         // software de origen (param_key: source)
   // 1. Atmósfera
   register: string;       // registro atmosférico (param_key: register)
   light: string;          // condición lumínica (light)

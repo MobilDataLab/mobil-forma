@@ -131,6 +131,11 @@ export const VOCAB: Record<string, Opcion[]> = {
   "avoid": [
     { key: "vegetacion_tropical", labelEs: "vegetación tropical o palmeras", promptEn: "tropical vegetation or palm trees", isDefault: true },
     { key: "gloss_inmobiliario", labelEs: "brillo inmobiliario comercial o sobresaturación", promptEn: "commercial real-estate gloss or oversaturation", isDefault: true }
+  ],
+  "source": [
+    { key: "forma", labelEs: "render de Forma", promptEn: "Autodesk Forma color-coded massing: each flat color is a USE, not a final material", isDefault: true },
+    { key: "sketchup", labelEs: "render de SketchUp", promptEn: "SketchUp color-coded massing: each flat color is a USE, not a final material", isDefault: false },
+    { key: "rhino", labelEs: "render de Rhino", promptEn: "Rhino color-coded massing: each flat color is a USE, not a final material", isDefault: false }
   ]
 };
 
@@ -261,6 +266,11 @@ export const PROMPT_EN: Record<string, Record<string, string>> = {
   "avoid": {
     "vegetacion_tropical": "tropical vegetation or palm trees",
     "gloss_inmobiliario": "commercial real-estate gloss or oversaturation"
+  },
+  "source": {
+    "forma": "Autodesk Forma color-coded massing: each flat color is a USE, not a final material",
+    "sketchup": "SketchUp color-coded massing: each flat color is a USE, not a final material",
+    "rhino": "Rhino color-coded massing: each flat color is a USE, not a final material"
   }
 };
 
@@ -289,7 +299,8 @@ const DEFAULTS: Record<string, string> = {
   "vegetation": "auto",
   "season": "auto",
   "accent": "none",
-  "sustainability": "none"
+  "sustainability": "none",
+  "source": "forma"
 };
 
 // Grupos multi-select (preserve/avoid): option_keys activas por defecto.

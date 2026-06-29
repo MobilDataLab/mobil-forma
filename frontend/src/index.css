@@ -728,6 +728,8 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .rnd-perfiles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rnd-perfil-btn { border: 1px solid var(--blue); border-radius: 4px; padding: 7px 14px; font: 700 11px var(--hd); letter-spacing: .04em; }
 .rnd-perfil-btn:hover { background: var(--blue-tint); }
+.rnd-source-on { background: var(--blue); color: #fff; }
+.rnd-source-on:hover { background: var(--blue); }
 .rnd-perfil-hint { font: 400 11px var(--bd); color: var(--gray-500, #8a8a8a); font-style: italic; }
 .rnd-clima-inferido { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--blue-tint); border: 1px solid var(--blue); border-radius: 4px; }
 .rnd-clima-lbl { font: 700 10px var(--hd); letter-spacing: .06em; text-transform: uppercase; color: var(--gray-700); }

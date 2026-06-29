@@ -217,7 +217,7 @@ export function construirJSON(
     },
     prompt: componerPrompt(usosConfirmados, preset, toma, ubicacion),
     locked: {
-      role: "Forma color-coded massing: each flat color is a USE, not a final material",
+      role: prosa("source", toma.source),
       geometry_and_camera: "keep exact volumes, proportions, positions and viewpoint",
       aspect_ratio: "do not change the input image aspect ratio",
     },

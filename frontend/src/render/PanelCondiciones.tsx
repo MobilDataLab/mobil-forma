@@ -8,8 +8,8 @@ export const AUTO_CLIMA = "auto";
 // Sentinela del dropdown: "Personalizado…" → habilita texto libre en cualquier eje.
 const CUSTOM = "__custom__";
 
-// Ejes single-select de la toma (excluye preserve/avoid, que son string[]).
-type EjeKey = Exclude<keyof CondicionesToma, "preserve" | "avoid">;
+// Ejes single-select con dropdown (excluye source = botones, y preserve/avoid = string[]).
+type EjeKey = Exclude<keyof CondicionesToma, "source" | "preserve" | "avoid">;
 
 // Mapa eje de la toma → param_key del Excel (clave en VOCAB). El <select> muestra
 // labelEs y su value es el option_key. La cámara/vista NO se elige: viene bloqueada.
@@ -56,16 +56,12 @@ export default function PanelCondiciones({
   climaInferido,
   toma,
   ubicacion,
-  perfiles,
-  onPerfil,
   onToma,
   onUbicacion,
 }: {
   climaInferido: string;
   toma: CondicionesToma;
   ubicacion: Ubicacion;
-  perfiles: Record<string, { nombre: string; patch: Partial<CondicionesToma> }>;
-  onPerfil: (id: string) => void;
   onToma: (patch: Partial<CondicionesToma>) => void;
   onUbicacion: (u: Ubicacion) => void;
 }) {
@@ -151,16 +147,22 @@ export default function PanelCondiciones({
 
   return (
     <div className="rnd-cond">
-      {/* Perfil de atmósfera: aplica un set coherente de ejes de una vez */}
+      {/* Origen del render base: define el intro del JSON (locked.role). Una opción a la vez. */}
       <div className="rnd-cond-cap">
-        <span className="rnd-cap-tit">Perfil de atmósfera</span>
+        <span className="rnd-cap-tit">Origen del render</span>
         <div className="rnd-perfiles">
-          {Object.entries(perfiles).map(([id, p]) => (
-            <button key={id} type="button" className="btn-link rnd-perfil-btn" onClick={() => onPerfil(id)}>
-              {p.nombre}
+          {(VOCAB.source ?? []).map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              className={"btn-link rnd-perfil-btn" + (toma.source === o.key ? " rnd-source-on" : "")}
+              aria-pressed={toma.source === o.key}
+              onClick={() => set("source", o.key)}
+            >
+              {o.labelEs}
             </button>
           ))}
-          <span className="rnd-perfil-hint">aplica luz, paleta, registro y estilo de una vez</span>
+          <span className="rnd-perfil-hint">de qué software viene la imagen base</span>
         </div>
       </div>
 
