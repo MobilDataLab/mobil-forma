@@ -1,7 +1,7 @@
 import type {
   UsoDetectado, Preset, CondicionesToma, RenderContractV2, Ubicacion, ElementoPrograma,
 } from "./tipos";
-import { PROMPT_EN, LUZ_DERIVADA } from "./vocabulario.generated";
+import { PROMPT_EN, LUZ_DERIVADA, defaultKeys } from "./vocabulario.generated";
 import { promptMaterial } from "./materialidad.generated";
 
 // option_key sentinela: vegetation/season "auto" → se usa lo inferido del clima.
@@ -169,20 +169,20 @@ function dataSustConst(toma: CondicionesToma, especies: string): Record<string, 
   };
 }
 
-// option_key cuya inclusión depende del clima: "vegetación tropical" solo tiene
-// sentido evitarla en climas áridos/semiáridos (en otros, no aplica).
-const AVOID_CLIMA_GATED: Record<string, (clima: string) => boolean> = {
-  vegetacion_tropical: (clima) => clima.includes("semiárido") || clima.includes("árido"),
-};
+// option_key del banco que solo tiene sentido sembrar en climas áridos/semiáridos
+// (evitar vegetación tropical). Solo afecta el SEED inicial; tras eso la lista es manual.
+const AVOID_CLIMA_GATED = new Set(["vegetacion_tropical"]);
 
-// Resuelve una lista de option_keys activas (preserve/avoid) a su prosa EN, aplicando
-// el filtro por clima. El orden lo manda el banco del Excel (PROMPT_EN[param]).
-function restriccionesEN(param: string, activas: string[], clima: string): string[] {
+// Texto inglés inicial (seed) de un banco de restricciones (preserve/avoid) desde el
+// Excel: toma las opciones default y devuelve su prompt_en. Para `avoid`, las opciones
+// "climáticas" (tropical) solo se siembran si el clima es árido/semiárido. A partir del
+// seed, la lista es texto libre editable en la UI (esta función NO se usa en cada render).
+export function seedRestricciones(param: string, clima: string): string[] {
   const dic = PROMPT_EN[param] ?? {};
-  const orden = Object.keys(dic);
-  return orden
-    .filter((k) => activas.includes(k))
-    .filter((k) => !AVOID_CLIMA_GATED[k] || AVOID_CLIMA_GATED[k](clima))
+  const arido = clima.includes("semiárido") || clima.includes("árido");
+  // defaultKeys(param) = option_keys marcadas default en el Excel, en orden.
+  return defaultKeys(param)
+    .filter((k) => !AVOID_CLIMA_GATED.has(k) || arido)
     .map((k) => dic[k])
     .filter(Boolean);
 }
@@ -201,10 +201,11 @@ export function construirJSON(
   const accent = prosa("accent", toma.accent);
   const luz = LUZ_DERIVADA[toma.light] ?? { direction: "", intensity: "", colorTemperature: "" };
 
-  // preserve / avoid: prosa EN de las restricciones activas del banco (editadas en ES),
-  // con filtro por clima. Geometry-lock vive aquí una sola vez (mención 2/2).
-  const preserve = restriccionesEN("preserve", toma.preserve, preset.clima);
-  const avoid = restriccionesEN("avoid", toma.avoid, preset.clima);
+  // preserve / avoid: lista de texto inglés editada a mano en la UI (sembrada desde el
+  // banco del Excel). Lo que está en la lista es literal lo que va al JSON — sin resolver
+  // keys ni filtrar. Geometry-lock vive aquí una sola vez (mención 2/2).
+  const preserve = toma.preserve.map((s) => s.trim()).filter(Boolean);
+  const avoid = toma.avoid.map((s) => s.trim()).filter(Boolean);
 
   const elements: ElementoPrograma[] = usosConfirmados.map(elementoDe);
 

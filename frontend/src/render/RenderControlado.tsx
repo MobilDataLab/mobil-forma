@@ -2,12 +2,12 @@ import { useMemo, useRef, useState } from "react";
 import type { ColorCanonico } from "../PaletaColores";
 import type { InspeccionImagen, CondicionesToma, Preset, Ubicacion, UsoDetectado } from "./tipos";
 import { detectarColores } from "./colorDetector";
-import { construirJSON, aTexto } from "./jsonBuilder";
+import { construirJSON, aTexto, seedRestricciones } from "./jsonBuilder";
 import { climaDesdeCoords } from "./clima";
 import TablaColores from "./TablaColores";
 import ColorPickerModal from "./ColorPickerModal";
 import PanelCondiciones from "./PanelCondiciones";
-import { defaultKey, defaultKeys } from "./vocabulario.generated";
+import { defaultKey } from "./vocabulario.generated";
 import { IconoArchivo, IconoSubir, IconoDescarga } from "../iconos";
 
 // Default = el option_key marcado isDefault de cada eje en el Excel (fuente de verdad).
@@ -30,9 +30,11 @@ const TOMA_DEFAULT: CondicionesToma = {
   vegetation: defaultKey("vegetation"),
   season: defaultKey("season"),
   sustainability: defaultKey("sustainability"),
-  // Restricciones (banco multi-select): arrancan con las activas por defecto.
-  preserve: defaultKeys("preserve"),
-  avoid: defaultKeys("avoid"),
+  // Restricciones: lista de texto inglés editable, sembrada del banco del Excel.
+  // El seed inicial usa el clima del preset por defecto (Batuco, semiárido → incluye
+  // "evitar tropical"). Si el usuario cambia la ubicación, puede editar la lista a mano.
+  preserve: seedRestricciones("preserve", "semiárido mediterráneo"),
+  avoid: seedRestricciones("avoid", "semiárido mediterráneo"),
 };
 
 // Perfiles de arranque: aplican un set coherente de ejes (por option_key) de una vez.
@@ -262,9 +264,9 @@ export default function RenderControlado({ paleta }: Props) {
           </div>
           <pre className="rnd-prompt">{promptText || "Confirma al menos un uso para generar el prompt."}</pre>
 
-          {/* 4a-bis. Restricciones: vista previa en inglés (se editan en español arriba) */}
+          {/* 4a-bis. Restricciones: bloque consolidado para copiar (se editan en la lista arriba) */}
           <div className="rnd-json-head">
-            <span className="rnd-cap-tit">Restricciones del render (vista previa en inglés)</span>
+            <span className="rnd-cap-tit">Restricciones del render (PRESERVE / AVOID)</span>
             <button className="btn-export" onClick={copiarRestricciones} disabled={!restriccionesText}>
               <IconoDescarga /> {copiadoRestric ? "¡Copiado!" : "Copiar restricciones"}
             </button>

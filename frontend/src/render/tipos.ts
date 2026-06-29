@@ -57,8 +57,8 @@ export type CondicionesToma = {
   vegetation: string;     // densidad de vegetación o "auto" (vegetation)
   season: string;         // estación o "auto" (season)
   sustainability: string; // estrategia sustentable visible (sustainability)
-  // 4. Restricciones (multi-select): option_keys activas del banco del Excel.
-  // Se muestran/editan en español; al exportar el JSON usa su prompt_en.
+  // 4. Restricciones: lista de texto en INGLÉS, editable a mano en la UI (líneas que
+  // van literales al JSON). Se siembra desde el banco del Excel (seedRestricciones).
   preserve: string[];     // qué se preserva (preserve)
   avoid: string[];        // qué se evita (avoid)
 };

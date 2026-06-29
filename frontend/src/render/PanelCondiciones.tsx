@@ -72,31 +72,50 @@ export default function PanelCondiciones({
   const set = (key: keyof CondicionesToma, value: string) =>
     onToma({ [key]: value } as Partial<CondicionesToma>);
 
-  // Toggle de una restricción (multi-select) en preserve/avoid: añade/quita su option_key.
-  const toggleMulti = (key: "preserve" | "avoid", optKey: string, on: boolean) => {
-    const actuales = toma[key];
-    const next = on ? [...actuales, optKey] : actuales.filter((k) => k !== optKey);
+  // Edita una línea de una lista de restricciones (preserve / avoid).
+  const editarLinea = (key: "preserve" | "avoid", i: number, texto: string) => {
+    const next = toma[key].slice();
+    next[i] = texto;
     onToma({ [key]: next } as Partial<CondicionesToma>);
   };
+  const quitarLinea = (key: "preserve" | "avoid", i: number) => {
+    onToma({ [key]: toma[key].filter((_, j) => j !== i) } as Partial<CondicionesToma>);
+  };
+  const agregarLinea = (key: "preserve" | "avoid") => {
+    onToma({ [key]: [...toma[key], ""] } as Partial<CondicionesToma>);
+  };
 
-  // Grupo de checkboxes en español para un banco multi-select (preserve / avoid).
-  const restricciones = (key: "preserve" | "avoid", titulo: string) => {
-    const opciones = VOCAB[key] ?? [];
-    const activas = toma[key];
+  // Lista de texto editable (en inglés) para un banco de restricciones (preserve / avoid).
+  // Cada línea va literal al JSON; se puede reescribir, borrar o agregar.
+  const restricciones = (key: "preserve" | "avoid", titulo: string, hint: string) => {
+    const lineas = toma[key];
     return (
       <div className="rnd-cond-cap" key={key}>
-        <span className="rnd-cap-tit">{titulo}</span>
-        <div className="rnd-restric-grid">
-          {opciones.map((o) => (
-            <label className="rnd-restric-item" key={o.key}>
+        <div className="rnd-restric-head">
+          <span className="rnd-cap-tit">{titulo}</span>
+          <span className="rnd-restric-hint">{hint}</span>
+        </div>
+        <div className="rnd-restric-list">
+          {lineas.map((linea, i) => (
+            <div className="rnd-restric-row" key={i}>
               <input
-                type="checkbox"
-                checked={activas.includes(o.key)}
-                onChange={(e) => toggleMulti(key, o.key, e.target.checked)}
+                type="text"
+                className="rnd-restric-input"
+                value={linea}
+                placeholder="instrucción en inglés…"
+                onChange={(e) => editarLinea(key, i, e.target.value)}
               />
-              <span>{o.labelEs}</span>
-            </label>
+              <button
+                type="button"
+                className="nrm-x rnd-restric-del"
+                title="Quitar restricción"
+                onClick={() => quitarLinea(key, i)}
+              >×</button>
+            </div>
           ))}
+          <button type="button" className="btn-link rnd-restric-add" onClick={() => agregarLinea(key)}>
+            + Agregar restricción
+          </button>
         </div>
       </div>
     );
@@ -166,9 +185,9 @@ export default function PanelCondiciones({
         </div>
       ))}
 
-      {/* Restricciones del render (banco editable en español → JSON en inglés) */}
-      {restricciones("preserve", "Restricciones — preservar")}
-      {restricciones("avoid", "Restricciones — evitar")}
+      {/* Restricciones del render: lista de texto editable (inglés) → va literal al JSON */}
+      {restricciones("preserve", "Restricciones — preservar", "lo que NO debe cambiar · texto en inglés, editable")}
+      {restricciones("avoid", "Restricciones — evitar", "lo que se debe evitar · texto en inglés, editable")}
     </div>
   );
 }
