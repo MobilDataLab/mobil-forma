@@ -56,12 +56,14 @@ export default function PanelCondiciones({
   climaInferido,
   toma,
   ubicacion,
+  refKeys,
   onToma,
   onUbicacion,
 }: {
   climaInferido: string;
   toma: CondicionesToma;
   ubicacion: Ubicacion;
+  refKeys?: Set<string>;
   onToma: (patch: Partial<CondicionesToma>) => void;
   onUbicacion: (u: Ubicacion) => void;
 }) {
@@ -122,9 +124,11 @@ export default function PanelCondiciones({
     const valor = toma[key];
     // Si el valor actual no es un option_key conocido → modo personalizado (texto libre).
     const esCustom = !opciones.some((o) => o.key === valor);
+    // ¿Este eje vino de "Capturar referencia"? → etiqueta + filo amarillo.
+    const esRef = !!refKeys?.has(key);
     return (
-      <div className="field rnd-field" key={key}>
-        <label>{label}</label>
+      <div className={"field rnd-field" + (esRef ? " is-ref" : "")} key={key}>
+        <label>{label}{esRef && <span className="rnd-reftag">ref</span>}</label>
         <select
           value={esCustom ? CUSTOM : valor}
           onChange={(e) => set(key, e.target.value === CUSTOM ? (esCustom ? valor : "") : e.target.value)}

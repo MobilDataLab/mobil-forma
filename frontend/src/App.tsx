@@ -26,11 +26,11 @@ const VISTAS = [
   { id: "resumen", label: "Resumen" },
   { id: "elementos", label: "Elementos" },
   { id: "estac", label: "Estacionamientos" },
-  { id: "edificios", label: "Edificios" },
   { id: "normas", label: "Normas" },
+  { id: "edificios", label: "Edificios" },
   { id: "cabida", label: "Cabida por piso" },
-  { id: "paleta", label: "Paleta" },
   { id: "render", label: "Render" },
+  { id: "paleta", label: "Paleta" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
 
@@ -334,14 +334,15 @@ json.dumps({
           <span className="topbar-meta">100% en tu navegador · el CSV no se sube</span>
         </div>
         <nav className="tabnav"><div className="tabnav-inner">
-          {VISTAS.map((v) => (
+          {VISTAS.map((v, i) => (
             <button
               key={v.id}
-              className={"tab" + (vistaActiva === v.id ? " on" : "") + (v.id === "paleta" ? " tab-right" : "")}
+              className={"tab" + (vistaActiva === v.id ? " on" : "") + (v.id === "render" ? " tab-right" : "")}
               onClick={() => setVista(v.id)}
               disabled={!dispo[v.id]}
               title={dispo[v.id] ? undefined : "Carga un CSV para ver esta sección"}
             >
+              {v.id !== "render" && v.id !== "paleta" && <span className="tab-num">{i + 1}.</span>}
               {v.label}
               {v.id === "elementos" && tabla && <span className="tab-badge">{tabla.filas.length}</span>}
             </button>
