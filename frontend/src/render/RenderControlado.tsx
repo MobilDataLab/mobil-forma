@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ColorCanonico } from "../PaletaColores";
 import type { InspeccionImagen, CondicionesToma, Preset, Ubicacion, UsoDetectado } from "./tipos";
 import { detectarColores } from "./colorDetector";
@@ -77,6 +77,14 @@ export default function RenderControlado({ paleta }: Props) {
     const base = climaDesdeCoords(ubicacion.lat, ubicacion.lng);
     return { ...base, location: ubicacion.etiqueta || base.location };
   }, [ubicacion.lat, ubicacion.lng, ubicacion.etiqueta]);
+
+  // Puente hacia el Informe de cabida: persiste ubicación + clima en localStorage
+  // (mismo patrón que estac/normas) para que el PPTX los herede sin acoplar estados.
+  useEffect(() => {
+    try {
+      localStorage.setItem("mobil-render-ubicacion", JSON.stringify({ etiqueta: ubicacion.etiqueta, clima: preset.clima }));
+    } catch { /* almacenamiento no disponible → se ignora */ }
+  }, [ubicacion.etiqueta, preset.clima]);
   const [copiado, setCopiado] = useState(false);
   const [pickerAbierto, setPickerAbierto] = useState(false);
   const [error, setError] = useState<string>("");
