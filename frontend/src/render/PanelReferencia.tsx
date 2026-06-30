@@ -9,7 +9,7 @@ import { IconoDescarga } from "../iconos";
 export default function PanelReferencia({
   onAplicar,
 }: {
-  onAplicar: (patch: Partial<CondicionesToma>) => void;
+  onAplicar: (patch: Partial<CondicionesToma>, campos: string[]) => void;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [pegado, setPegado] = useState("");
@@ -29,19 +29,22 @@ export default function PanelReferencia({
       setMsg({ tipo: "err", texto: r.error });
       return;
     }
-    onAplicar(r.patch);
-    setMsg({ tipo: "ok", texto: `Referencia aplicada · ${r.campos.length} ejes en Personalizado.` });
+    onAplicar(r.patch, r.campos);
+    setMsg({ tipo: "ok", texto: `Referencia aplicada · ${r.campos.length} ejes en modo referencia.` });
   };
 
   return (
-    <div className="rnd-cond-cap rnd-ref">
+    <div className="rndw-ref">
       <button
         type="button"
         className="rnd-ref-toggle"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
       >
-        <span className="rnd-cap-tit">Capturar referencia (foto → parámetros)</span>
+        <span>
+          <span className="rnd-cap-tit">Capturar desde una foto de referencia</span>
+          <span className="rndw-ref-sub">Atajo: extrae las condiciones de otra imagen y rellena los ejes. La foto no se sube.</span>
+        </span>
         <span className="rnd-ref-chevron">{abierto ? "▾" : "▸"}</span>
       </button>
 
