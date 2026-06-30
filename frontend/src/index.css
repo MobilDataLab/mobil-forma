@@ -135,6 +135,8 @@ body {
 .tab.on { color: var(--blue-strong); border-bottom-color: var(--blue); }
 .tab:disabled { color: var(--gray-400); opacity: .4; cursor: not-allowed; }
 .tab.tab-right { margin-left: auto; }
+.tab .tab-num { margin-right: 6px; color: var(--gray-400); }
+.tab.on .tab-num { color: var(--blue-strong); }
 .tab .tab-badge {
   display: inline-block; margin-left: 6px; min-width: 16px; padding: 1px 6px;
   font: 700 10px var(--bd); border-radius: 0;
