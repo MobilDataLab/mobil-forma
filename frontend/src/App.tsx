@@ -17,6 +17,7 @@ import { MobilMark } from "./MobilMark";
 import { descargarXlsxBase64 } from "./exportar";
 import AsistenteCarga, { type Inspeccion, type ConfigEdificios } from "./AsistenteCarga";
 import RenderControlado from "./render/RenderControlado";
+import PanelInforme from "./informe/PanelInforme";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
@@ -31,6 +32,7 @@ const VISTAS = [
   { id: "cabida", label: "Cabida por piso" },
   { id: "paleta", label: "Paleta" },
   { id: "render", label: "Render" },
+  { id: "informe", label: "Informe" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
 
@@ -316,6 +318,7 @@ json.dumps({
     normas: !!normas,
     paleta: !!paleta,
     render: !!paleta,   // independiente del CSV; solo necesita la paleta del motor
+    informe: true,      // siempre accesible; avisa adentro si falta el CSV
   };
   // Si la pestaña recordada aún no tiene datos, caemos a «Resumen».
   const vistaActiva: Vista = dispo[vista] ? vista : "resumen";
@@ -473,6 +476,20 @@ json.dumps({
         {vistaActiva === "render" && paleta && (
           <div className="grid">
             <section className="panel col-12"><RenderControlado paleta={paleta} /></section>
+          </div>
+        )}
+
+        {vistaActiva === "informe" && (
+          <div className="grid">
+            <section className="panel col-12">
+              <PanelInforme
+                resumen={resumen}
+                venta={venta}
+                matriz={matriz}
+                edificios={edificios}
+                normas={normas}
+              />
+            </section>
           </div>
         )}
       </main>
