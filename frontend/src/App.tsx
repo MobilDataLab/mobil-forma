@@ -345,7 +345,7 @@ json.dumps({
               disabled={!dispo[v.id]}
               title={dispo[v.id] ? undefined : "Carga un CSV para ver esta sección"}
             >
-              {v.id !== "render" && v.id !== "paleta" && <span className="tab-num">{i + 1}.</span>}
+              {v.id !== "render" && v.id !== "paleta" && v.id !== "informe" && <span className="tab-num">{i + 1}.</span>}
               {v.label}
               {v.id === "elementos" && tabla && <span className="tab-badge">{tabla.filas.length}</span>}
             </button>
