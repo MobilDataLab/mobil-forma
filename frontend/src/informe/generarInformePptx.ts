@@ -22,13 +22,15 @@ const C = {
   gris200: "DEDEDE",
   gris50: "F5F5F5",
   ok: "1F8A5B",
+  error: "C8412C",
   blanco: "FFFFFF",
 };
-// Tipografía: condensada Mobil para títulos/labels, Roboto para cuerpo.
-// PowerPoint busca la fuente por su nombre instalado en el PC que abre el archivo;
-// "Swis721 Cn BT" es el nombre estándar (Bitstream) que tienen los equipos de Mobil.
-// En un PC sin esa fuente, PowerPoint cae al fallback condensado automáticamente.
-const F_HEAD = "Swis721 Cn BT";
+// Tipografía: condensada para títulos/labels, Roboto para cuerpo.
+// Se usa "Arial Narrow" (condensada estándar de Windows, presente en casi todo PC) en
+// lugar de "Swis721 Cn BT": esa fuente Mobil no está instalada en la mayoría de equipos,
+// así que PowerPoint caía a Calibri y el informe se veía genérico. Arial Narrow mantiene
+// el aire condensado de forma consistente en cualquier PC.
+const F_HEAD = "Arial Narrow";
 const F_BODY = "Roboto";
 
 // Lámina 16:9 en pulgadas (13.333 × 7.5). Helpers de proporción contra ese lienzo.
@@ -95,6 +97,10 @@ function laminaPortada(pptx: PptxGenJSType, inf: Informe) {
 
   if (tieneHero) {
     s.addImage({ data: inf.imagenes.portada!, x: 7.0, y: 0, w: W - 7.0, h: H, sizing: { type: "cover", w: W - 7.0, h: H } });
+  } else {
+    // Sin imagen → motivo hexagonal Mobil en el lado derecho.
+    s.addShape("hexagon", { x: 8.5, y: 1.9, w: 3.8, h: 3.3, fill: { color: C.blanco }, line: { color: C.gris200, width: 2 }, rotate: 90 });
+    s.addShape("hexagon", { x: 9.9, y: 3.0, w: 1.0, h: 0.87, fill: { color: C.blanco }, line: { color: C.azul, width: 2 }, rotate: 90 });
   }
   barraPie(s, C.azul);
 }
@@ -302,11 +308,13 @@ function laminaNormativa(pptx: PptxGenJSType, inf: Informe) {
   // se avisa al pie. Esto evita el desborde y el archivo gigante.
   const MAX_COLS = 3, MAX_FILAS = 16;
   const cols = tabla.columnas.slice(0, MAX_COLS);
+  // ¿La columna del semáforo (Propuesto) está entre las visibles?
+  const colEstado = tabla.colEstado && cols.some((c) => c.id === tabla.colEstado) ? tabla.colEstado : undefined;
   const head = ["Parámetro", ...cols.map((c) => c.nombre)];
   const rows: PptxGenJSType.TableRow[] = [
     head.map((h) => ({ text: h, options: { fontFace: F_HEAD, fontSize: 10, bold: true, color: C.blanco, fill: { color: C.azul }, charSpacing: 1, align: "center" as const } })),
   ];
-  let usadas = 0, recortado = false;
+  let usadas = 0, recortado = false, hayEstado = false;
   for (const f of tabla.filas) {
     if (usadas >= MAX_FILAS) { recortado = true; break; }
     if (f.grupo) {
@@ -318,7 +326,15 @@ function laminaNormativa(pptx: PptxGenJSType, inf: Informe) {
       { text: f.label, options: { fontFace: F_BODY, fontSize: 9, color: C.ink, align: "left" } },
     ];
     for (const c of cols) {
-      cells.push({ text: f.valores?.[c.id] ?? "—", options: { fontFace: F_BODY, fontSize: 9, color: C.ink, align: "center" } });
+      const val = f.valores?.[c.id] ?? "—";
+      // En la columna Propuesto, antepone el punto de semáforo (●) coloreado.
+      if (c.id === colEstado && (f.estado === "ok" || f.estado === "excede")) {
+        hayEstado = true;
+        const dot = f.estado === "ok" ? C.ok : C.error;
+        cells.push({ text: [{ text: "● ", options: { color: dot } }, { text: val, options: { color: C.ink } }], options: { fontFace: F_BODY, fontSize: 9, align: "center" } });
+      } else {
+        cells.push({ text: val, options: { fontFace: F_BODY, fontSize: 9, color: C.ink, align: "center" } });
+      }
     }
     rows.push(cells);
     usadas++;
@@ -333,6 +349,16 @@ function laminaNormativa(pptx: PptxGenJSType, inf: Informe) {
     x: MARGEN, y: 1.75, w: tableW, colW: [firstW, ...Array(colCount - 1).fill(restW)],
     border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.32, autoPage: false,
   });
+  // Mini-leyenda del semáforo (solo si alguna fila lo tiene).
+  if (hayEstado) {
+    s.addText(
+      [
+        { text: "● ", options: { color: C.ok } }, { text: "cumple    ", options: { color: C.gris700 } },
+        { text: "● ", options: { color: C.error } }, { text: "excede", options: { color: C.gris700 } },
+      ],
+      { x: MARGEN, y: H - 0.85, w: 6, h: 0.3, fontFace: F_BODY, fontSize: 10 }
+    );
+  }
   if (recortado) {
     s.addText("Tabla resumida — ver el detalle completo en la app / Excel de normativa.", { x: MARGEN, y: H - 0.55, w: 10, h: 0.3, fontFace: F_BODY, fontSize: 9, color: C.gris400, italic: true });
   }
@@ -348,38 +374,50 @@ function laminaEstacionamientos(pptx: PptxGenJSType, inf: Informe) {
   margenVertical(s);
   encabezado(s, "03 — Normativa", "", "Estacionamientos");
 
-  const head = ["Bloque", "Superficie m²", "Cajones", "m² / cajón"];
+  // Si aún no hay dotación de cajones, se ocultan esas columnas y el KPI de ratio
+  // (antes mostraba "0 cajones · — m²/cajón" y parecía un bug).
+  const totGfa = bloques.reduce((a, b) => a + b.gfa, 0);
+  const totCaj = bloques.reduce((a, b) => a + b.cajones, 0);
+  const conCajones = totCaj > 0;
+
+  const head = conCajones ? ["Bloque", "Superficie m²", "Cajones", "m² / cajón"] : ["Bloque", "Superficie m²"];
   const rows: PptxGenJSType.TableRow[] = [
     head.map((h) => ({ text: h, options: { fontFace: F_HEAD, fontSize: 11, bold: true, color: C.blanco, fill: { color: C.azul }, charSpacing: 1, align: "center" as const } })),
   ];
-  let totGfa = 0, totCaj = 0;
   for (const b of bloques) {
-    totGfa += b.gfa; totCaj += b.cajones;
-    rows.push([
+    const fila: PptxGenJSType.TableCell[] = [
       { text: b.titulo, options: { fontFace: F_BODY, fontSize: 12, color: C.ink, align: "left" } },
-      { text: fmt(b.gfa), options: { fontFace: F_BODY, fontSize: 12, align: "center" } },
-      { text: fmt(b.cajones), options: { fontFace: F_BODY, fontSize: 12, align: "center" } },
-      { text: b.ratio ? fmt(b.ratio, 1) : (b.cajones ? fmt(b.gfa / b.cajones, 1) : "—"), options: { fontFace: F_BODY, fontSize: 12, align: "center" } },
-    ]);
+      { text: `${fmt(b.gfa)} m²`, options: { fontFace: F_BODY, fontSize: 12, align: "center" } },
+    ];
+    if (conCajones) {
+      fila.push({ text: fmt(b.cajones), options: { fontFace: F_BODY, fontSize: 12, align: "center" } });
+      fila.push({ text: b.ratio ? fmt(b.ratio, 1) : (b.cajones ? fmt(b.gfa / b.cajones, 1) : "—"), options: { fontFace: F_BODY, fontSize: 12, align: "center" } });
+    }
+    rows.push(fila);
   }
   s.addTable(rows, {
-    x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: [4.6, 3.2, 2.3, 2.0],
+    x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: conCajones ? [4.6, 3.2, 2.3, 2.0] : [6.0, 6.1],
     border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.5,
   });
 
-  // 2 KPIs: superficie total modelada y ratio global.
-  const ratioGlobal = totCaj ? totGfa / totCaj : 0;
-  const kpis: [string, string][] = [
-    ["Superficie modelada", `${fmt(totGfa)} m²`],
-    ["Ratio global", ratioGlobal ? `${fmt(ratioGlobal, 1)} m²/cajón` : "—"],
-  ];
-  kpis.forEach(([k, v], i) => {
-    const x = MARGEN + i * 3.4;
-    const y = 1.8 + (bloques.length + 1) * 0.5 + 0.5;
-    s.addShape("rect", { x, y, w: 3.1, h: 1.2, fill: { color: C.gris50 }, line: { color: C.gris200, width: 1 } });
-    s.addText(v, { x, y: y + 0.12, w: 3.1, h: 0.6, fontFace: F_HEAD, fontSize: 26, color: C.ink, align: "center", valign: "middle" });
-    s.addText(k.toUpperCase(), { x, y: y + 0.78, w: 3.1, h: 0.3, fontFace: F_HEAD, fontSize: 10, color: C.gris700, charSpacing: 1, bold: true, align: "center" });
-  });
+  const yBase = 1.8 + (bloques.length + 1) * 0.5 + 0.5;
+  if (conCajones) {
+    const ratioGlobal = totGfa / totCaj;
+    const kpis: [string, string][] = [
+      ["Superficie modelada", `${fmt(totGfa)} m²`],
+      ["Ratio global", `${fmt(ratioGlobal, 1)} m²/cajón`],
+    ];
+    kpis.forEach(([k, v], i) => {
+      const x = MARGEN + i * 3.4;
+      s.addShape("rect", { x, y: yBase, w: 3.1, h: 1.2, fill: { color: C.gris50 }, line: { color: C.gris200, width: 1 } });
+      s.addText(v, { x, y: yBase + 0.12, w: 3.1, h: 0.6, fontFace: F_HEAD, fontSize: 26, color: C.ink, align: "center", valign: "middle" });
+      s.addText(k.toUpperCase(), { x, y: yBase + 0.78, w: 3.1, h: 0.3, fontFace: F_HEAD, fontSize: 10, color: C.gris700, charSpacing: 1, bold: true, align: "center" });
+    });
+  } else {
+    s.addShape("rect", { x: MARGEN, y: yBase, w: 6.4, h: 1.0, fill: { color: C.gris50 }, line: { color: C.azul, width: 1 } });
+    s.addText(`${fmt(totGfa)} m²`, { x: MARGEN, y: yBase + 0.1, w: 6.4, h: 0.5, fontFace: F_HEAD, fontSize: 26, color: C.ink, align: "center", valign: "middle" });
+    s.addText("SUPERFICIE MODELADA · DOTACIÓN DE CAJONES PENDIENTE", { x: MARGEN, y: yBase + 0.62, w: 6.4, h: 0.3, fontFace: F_HEAD, fontSize: 10, color: C.gris700, charSpacing: 1, bold: true, align: "center" });
+  }
   barraPie(s, C.amarillo);
 }
 
@@ -398,7 +436,7 @@ function laminaAnexo(pptx: PptxGenJSType, data: string, rotulo: string) {
 function laminaCierre(pptx: PptxGenJSType) {
   const s = pptx.addSlide();
   s.background = { color: C.azulProfundo };
-  s.addText("◆", { x: 0, y: 2.4, w: W, h: 1.0, fontFace: F_BODY, fontSize: 54, color: C.amarillo, align: "center" });
+  s.addShape("hexagon", { x: W / 2 - 0.5, y: 2.35, w: 1.0, h: 0.87, fill: { color: C.azulProfundo }, line: { color: C.amarillo, width: 2.5 }, rotate: 90 });
   s.addText("MOBIL ARQUITECTOS", { x: 0, y: 3.7, w: W, h: 0.6, fontFace: F_HEAD, fontSize: 30, color: C.blanco, charSpacing: 3, align: "center" });
   s.addText("Informe de cabida generado con mobil-forma", { x: 0, y: 4.4, w: W, h: 0.4, fontFace: F_BODY, fontSize: 13, color: C.gris400, align: "center" });
   barraPie(s, C.amarillo);
