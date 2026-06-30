@@ -101,11 +101,12 @@ export default function PanelInforme({ resumen, venta, matriz, edificios, normas
         </div>
       )}
 
-      {/* Nombre del proyecto */}
+      {/* Nombre del proyecto (obligatorio para descargar) */}
       <div className="inf-bloque">
-        <span className="rnd-cap-tit">Nombre del proyecto</span>
+        <span className="rnd-cap-tit">Nombre del proyecto <span className="inf-req">· obligatorio</span></span>
         <input
-          type="text" className="inf-nombre"
+          type="text"
+          className={"inf-nombre" + (hayCabida && !nombre.trim() ? " inf-nombre-falta" : "")}
           placeholder="Ej. Conjunto Habitacional Batuco"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
@@ -145,6 +146,10 @@ export default function PanelInforme({ resumen, venta, matriz, edificios, normas
           {generando ? <IconoArchivo /> : <IconoDescarga />}
           {generando ? "Generando…" : "Descargar informe (PPTX)"}
         </button>
+        {/* Pista de por qué el botón está deshabilitado (evita que parezca roto). */}
+        {hayCabida && !generando && !nombre.trim() && (
+          <span className="inf-msg inf-hint-req">Escribe un nombre del proyecto para descargar.</span>
+        )}
         {msg && <span className={"inf-msg " + msg.t}>{msg.x}</span>}
       </div>
     </div>
