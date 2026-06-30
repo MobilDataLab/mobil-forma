@@ -18,6 +18,7 @@ import { descargarXlsxBase64 } from "./exportar";
 import AsistenteCarga, { type Inspeccion, type ConfigEdificios } from "./AsistenteCarga";
 import RenderControlado from "./render/RenderControlado";
 import PanelInforme from "./informe/PanelInforme";
+import PanelPlantas from "./plantas/PanelPlantas";
 
 type Estado = "cargando" | "listo" | "error";
 type Resumen = { elementos: number; venta: number; construido: number; eficiencia: number };
@@ -32,6 +33,7 @@ const VISTAS = [
   { id: "cabida", label: "Cabida por piso" },
   { id: "render", label: "Render" },
   { id: "paleta", label: "Paleta" },
+  { id: "plantas", label: "Plantas" },
   { id: "informe", label: "Informe" },
 ] as const;
 type Vista = (typeof VISTAS)[number]["id"];
@@ -318,6 +320,7 @@ json.dumps({
     normas: !!normas,
     paleta: !!paleta,
     render: !!paleta,   // independiente del CSV; solo necesita la paleta del motor
+    plantas: true,      // independiente del CSV: recolor de un PNG en el navegador
     informe: true,      // siempre accesible; avisa adentro si falta el CSV
   };
   // Si la pestaña recordada aún no tiene datos, caemos a «Resumen».
@@ -345,7 +348,7 @@ json.dumps({
               disabled={!dispo[v.id]}
               title={dispo[v.id] ? undefined : "Carga un CSV para ver esta sección"}
             >
-              {v.id !== "render" && v.id !== "paleta" && v.id !== "informe" && <span className="tab-num">{i + 1}.</span>}
+              {v.id !== "render" && v.id !== "paleta" && v.id !== "plantas" && v.id !== "informe" && <span className="tab-num">{i + 1}.</span>}
               {v.label}
               {v.id === "elementos" && tabla && <span className="tab-badge">{tabla.filas.length}</span>}
             </button>
@@ -477,6 +480,12 @@ json.dumps({
         {vistaActiva === "render" && paleta && (
           <div className="grid">
             <section className="panel col-12"><RenderControlado paleta={paleta} /></section>
+          </div>
+        )}
+
+        {vistaActiva === "plantas" && (
+          <div className="grid">
+            <section className="panel col-12"><PanelPlantas /></section>
           </div>
         )}
 
