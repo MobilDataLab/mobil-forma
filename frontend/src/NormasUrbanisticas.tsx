@@ -277,7 +277,10 @@ function valorCalculo(
 // pantalla (localStorage) + los valores de cabida. Lo usa App al generar el Excel.
 export function normasParaExcel(normas: Normas): {
   columnas: { id: string; nombre: string }[];
-  filas: { label: string; formula?: string; grupo?: boolean; valores?: Record<string, string> }[];
+  // `estado` (semáforo cumple/excede) y `colEstado` (id de la columna Propuesto donde
+  // se pinta el punto) acompañan a las filas comparables; el resto queda "neutro".
+  colEstado?: string;
+  filas: { label: string; formula?: string; grupo?: boolean; valores?: Record<string, string>; estado?: "ok" | "excede" | "neutro" }[];
 } {
   let cols: Columna[] = COLS_INICIALES;
   let valores: Record<string, Record<string, string>> = {};
@@ -343,13 +346,30 @@ export function normasParaExcel(normas: Normas): {
       }
     }
     if (propId && p.cabida && !vals[propId]) vals[propId] = fmt(cabidaVal(p.cabida));
+    // Semáforo (misma regla que en pantalla): el valor de Forma (Propuesto) se compara
+    // contra el máximo normativo. El máximo se calcula de los datos del terreno, que
+    // pueden vivir en otra columna (p. ej. "Zona 1"); se toma el primer máximo válido
+    // entre las columnas visibles. cumple = Forma ≤ máx · excede = Forma > máx.
+    let estado: "ok" | "excede" | "neutro" = "neutro";
+    if (p.comparar && p.cabida && p.calculo) {
+      const valorForma = cabidaVal(p.cabida);
+      let max = NaN;
+      for (const c of visibles) {
+        const m = valorCalculo(p.calculo, vCol(c.id), forma, factores);
+        if (Number.isFinite(m) && m > 0) { max = m; break; }
+      }
+      if (Number.isFinite(max) && max > 0 && Number.isFinite(valorForma)) {
+        estado = valorForma <= max ? "ok" : "excede";
+      }
+    }
     return {
       label: p.unidad ? `${p.label} (${p.unidad})` : p.label,
       formula: formulaTexto(p),
       valores: vals,
+      estado,
     };
   });
-  return { columnas: visibles.map((c) => ({ id: c.id, nombre: c.nombre })), filas };
+  return { columnas: visibles.map((c) => ({ id: c.id, nombre: c.nombre })), colEstado: propId, filas };
 }
 
 export default function NormasUrbanisticas({
