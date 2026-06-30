@@ -1,46 +1,62 @@
 // Camino A — Recolor por píxel (determinista, frontend-only).
 //
-// Toma el PNG de la vista de plantas de Forma y lo normaliza a la paleta Mobil:
-//   1. clasifica cada píxel a una ClasePlanta (color → función),
-//   2. aplica un filtro de MAYORÍA 9×9 (2 pasadas) sobre la grilla de clases para
-//      borrar los m² "quemados" y los strokes finos (el texto del número queda como
-//      pixeles sueltos / huecos; la mayoría del vecindario impone el color de la unidad),
-//   3. repinta cada clase con su color (canónico o suave) dejando el fondo transparente.
+// Recolorea la vista de plantas de Forma a la paleta Mobil CONSERVANDO la geometría:
+// las divisiones entre unidades, las esquinas rectas y los m² rotulados del PNG se
+// mantienen. Solo cambia los colores de función a los canónicos/suaves y vuelve
+// transparente el fondo EXTERIOR (grilla, árboles, blanco alrededor del edificio).
 //
-// Todo corre en <canvas>; nada se sube. La geometría es la del raster (buena, no
-// vectorial-perfecta); los m² del PNG no son fiables → se re-rotulan aparte (texto vivo).
+// Cómo conserva divisiones y m²:
+//   1. clasifica cada píxel a una función (por color) o a "fondo",
+//   2. identifica el fondo EXTERIOR con un flood-fill desde los bordes: solo ese se
+//      vuelve transparente. El "fondo" ENCERRADO dentro de las unidades —las líneas de
+//      división y el texto de los m²— se conserva tal cual (no se borra ni se funde),
+//   3. repinta los píxeles de función con su color Mobil; deja intactos los demás.
+//
+// Todo corre en <canvas>; nada se sube.
 
 import { clasificarPixel, CLASES, rgb, type ClasePlanta } from "./paletaPlantas";
 
 export type VarianteColor = "canonico" | "suave";
 
 export type RecolorOpts = {
-  variante?: VarianteColor;  // paleta de pintado (def. "canonico")
-  radio?: number;            // radio del filtro de mayoría (def. 4 → ventana 9×9)
-  pasadas?: number;          // nº de pasadas del filtro (def. 2)
+  variante?: VarianteColor;   // paleta de pintado (def. "canonico")
+  limpiarRuido?: boolean;     // si true, atenúa motas de fondo encerradas pequeñas
 };
 
-// Índices de clase para la grilla compacta (Uint8Array).
-const ORDEN: ClasePlanta[] = ["fondo", "residencial", "nucleo", "otros", "comercial", "oficinas"];
 const IDX: Record<ClasePlanta, number> = { fondo: 0, residencial: 1, nucleo: 2, otros: 3, comercial: 4, oficinas: 5 };
+const ORDEN: ClasePlanta[] = ["fondo", "residencial", "nucleo", "otros", "comercial", "oficinas"];
 
-// Recolorea un ImageData de la planta y devuelve un ImageData nuevo (fondo transparente).
+// Recolorea un ImageData de la planta y devuelve uno nuevo (fondo exterior transparente).
 export function recolorPlanta(src: ImageData, opts: RecolorOpts = {}): ImageData {
-  const { variante = "canonico", radio = 4, pasadas = 2 } = opts;
+  const { variante = "canonico" } = opts;
   const { width: w, height: h, data } = src;
   const n = w * h;
 
-  // 1) Clasificar cada píxel → grilla de clases.
-  let clase: Uint8Array = new Uint8Array(n);
+  // 1) Clasificar cada píxel.
+  const clase = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const p = i * 4;
     clase[i] = IDX[clasificarPixel(data[p], data[p + 1], data[p + 2], data[p + 3])];
   }
 
-  // 2) Filtro de mayoría (cuadrado (2·radio+1)²), `pasadas` veces.
-  for (let k = 0; k < pasadas; k++) clase = mayoria(clase, w, h, radio);
+  // 2) Flood-fill del FONDO EXTERIOR desde los bordes (BFS sobre píxeles clase "fondo").
+  //    Solo el fondo conectado al borde de la imagen se marca como exterior.
+  const exterior = new Uint8Array(n); // 1 = fondo exterior (→ transparente)
+  const cola = new Int32Array(n);
+  let head = 0, tail = 0;
+  const push = (idx: number) => { if (!exterior[idx] && clase[idx] === IDX.fondo) { exterior[idx] = 1; cola[tail++] = idx; } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + (w - 1)); }
+  while (head < tail) {
+    const idx = cola[head++];
+    const x = idx % w, y = (idx / w) | 0;
+    if (x > 0) push(idx - 1);
+    if (x < w - 1) push(idx + 1);
+    if (y > 0) push(idx - w);
+    if (y < h - 1) push(idx + w);
+  }
 
-  // 3) Repintar. Pre-resuelve el RGB de cada clase según la variante.
+  // 3) Repintar. Resuelve el RGB de cada clase de función según la variante.
   const colorDe: ([number, number, number] | null)[] = ORDEN.map((c) => {
     if (c === "fondo") return null;
     const def = CLASES[c as Exclude<ClasePlanta, "fondo">];
@@ -49,44 +65,24 @@ export function recolorPlanta(src: ImageData, opts: RecolorOpts = {}): ImageData
 
   const out = new ImageData(w, h);
   for (let i = 0; i < n; i++) {
-    const col = colorDe[clase[i]];
     const p = i * 4;
-    if (!col) { out.data[p + 3] = 0; continue; } // fondo → transparente
-    out.data[p] = col[0]; out.data[p + 1] = col[1]; out.data[p + 2] = col[2]; out.data[p + 3] = 255;
-  }
-  return out;
-}
-
-// Filtro de mayoría: cada celda toma la clase dominante de su vecindario cuadrado.
-// Usa histograma incremental por fila (O(n·radio)) para que sea rápido en imágenes grandes.
-function mayoria(src: Uint8Array, w: number, h: number, radio: number): Uint8Array {
-  const out = new Uint8Array(src.length);
-  const NC = ORDEN.length;
-  const hist = new Int32Array(NC);
-  for (let y = 0; y < h; y++) {
-    const y0 = Math.max(0, y - radio), y1 = Math.min(h - 1, y + radio);
-    // Reinicia el histograma para la primera celda de la fila (x=0).
-    hist.fill(0);
-    let x1prev = Math.min(w - 1, radio);
-    for (let yy = y0; yy <= y1; yy++) {
-      const base = yy * w;
-      for (let xx = 0; xx <= x1prev; xx++) hist[src[base + xx]]++;
-    }
-    for (let x = 0; x < w; x++) {
-      // Mayoría actual.
-      let best = 0, bestC = 0;
-      for (let c = 0; c < NC; c++) if (hist[c] > best) { best = hist[c]; bestC = c; }
-      out[y * w + x] = bestC;
-      // Avanza la ventana: quita la columna que sale, agrega la que entra.
-      const xOut = x - radio, xInNext = x + 1 + radio;
-      if (xOut >= 0) for (let yy = y0; yy <= y1; yy++) hist[src[yy * w + xOut]]--;
-      if (xInNext < w) for (let yy = y0; yy <= y1; yy++) hist[src[yy * w + xInNext]]++;
+    const col = colorDe[clase[i]];
+    if (col) {
+      // Píxel de función → color Mobil pleno.
+      out.data[p] = col[0]; out.data[p + 1] = col[1]; out.data[p + 2] = col[2]; out.data[p + 3] = 255;
+    } else if (exterior[i]) {
+      // Fondo exterior → transparente.
+      out.data[p + 3] = 0;
+    } else {
+      // Fondo ENCERRADO (división entre unidades, texto de m²) → conservar el píxel
+      // original, para que las líneas y los números sigan siendo legibles.
+      out.data[p] = data[p]; out.data[p + 1] = data[p + 1]; out.data[p + 2] = data[p + 2]; out.data[p + 3] = data[p + 3];
     }
   }
   return out;
 }
 
-// Carga un object URL → ImageData (vía canvas). Útil para el pipeline desde un File.
+// Carga un object URL → ImageData (vía canvas).
 export function imagenAImageData(url: string): Promise<ImageData> {
   return new Promise((resolve, reject) => {
     const img = new Image();

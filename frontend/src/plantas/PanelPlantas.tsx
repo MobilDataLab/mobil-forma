@@ -89,8 +89,8 @@ export default function PanelPlantas() {
         >
           <span className="dz-icon">{nombre ? <IconoArchivo /> : <IconoSubir />}</span>
           <span className="dz-text">
-            <span className="dz-main">{nombre || "Selecciona el PNG de la vista de plantas"}</span>
-            <span className="dz-sub">{procesando ? "Procesando…" : nombre ? "Click para reemplazar" : "Vista coloreada por función (colores por uso)"}</span>
+            <span className="dz-main">{nombre || "Sube el PNG coloreado de la vista de plantas"}</span>
+            <span className="dz-sub">{procesando ? "Procesando…" : nombre ? "Click para reemplazar" : "El PNG con colores por función (no el SVG de líneas)"}</span>
           </span>
         </div>
         <input ref={inputRef} type="file" accept="image/png,image/jpeg" hidden
@@ -137,9 +137,10 @@ export default function PanelPlantas() {
             ))}
           </div>
           <p className="pl-nota">
-            Recolor determinista por color de píxel (Camino A). La geometría es la del PNG; los m² del
-            original no son fiables y deberían re-rotularse con el dato de Forma. Para precisión 1:1, ver
-            el Camino B (prompt para LLM) abajo o el GeoJSON del SDK.
+            Recolor determinista por color de píxel (Camino A): conserva la geometría, las divisiones
+            entre unidades y los m² rotulados del PNG; solo cambia los colores a la paleta Mobil y vuelve
+            transparente el fondo exterior. Para precisión 1:1 / re-rotulado con el dato real, ver el
+            Camino B (prompt para LLM) abajo o el GeoJSON del SDK.
           </p>
         </>
       )}
