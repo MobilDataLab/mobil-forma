@@ -1068,3 +1068,44 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .inf-msg { font: 400 13px var(--bd); }
 .inf-msg.ok { color: var(--state-success); }
 .inf-msg.err { color: var(--state-error); }
+
+/* ════════ Plantas diagramáticas ════════ */
+.plantas { display: flex; flex-direction: column; }
+.pl-bloque { margin-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+.pl-hint, .pl-nota { margin: 0; font: 400 12px var(--bd); color: var(--gray-400); }
+.pl-nota { margin-top: 12px; line-height: 1.5; }
+.pl-controles { margin-top: 22px; display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; }
+.pl-seg-grupo { display: flex; flex-direction: column; gap: 8px; }
+.pl-seg { display: flex; gap: 0; }
+.pl-seg-btn {
+  font: 700 10px var(--hd); letter-spacing: .05em; text-transform: uppercase;
+  padding: 8px 14px; border: 1px solid var(--gray-200); background: #fff; color: var(--gray-700);
+  cursor: pointer; margin-left: -1px;
+}
+.pl-seg-btn:first-child { margin-left: 0; }
+.pl-seg-btn:hover { border-color: var(--blue); color: var(--blue-strong); }
+.pl-seg-btn.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+.pl-descargar { margin-left: auto; }
+
+/* Escenario del plano — 3 variantes de estilo */
+.pl-stage { margin-top: 18px; padding: 32px; display: grid; place-items: center; border: 1px solid var(--gray-200); }
+.pl-stage-bloques { background: #fff; }
+.pl-stage-tecnico {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 23px, rgba(0,0,0,.05) 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 23px, rgba(0,0,0,.05) 23px 24px), #fff;
+}
+.pl-stage-editorial { background: var(--blue-deep); border-color: var(--blue-deep); }
+.pl-img { max-width: 100%; height: auto; display: block; }
+
+.pl-leyenda { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 18px; }
+.pl-leg-item { display: inline-flex; align-items: center; gap: 8px; font: 400 12px var(--bd); color: var(--ink); }
+.pl-sw { width: 14px; height: 14px; border: 1px solid var(--gray-200); }
+
+.pl-camino-b { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--gray-200); }
+.pl-copy-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.pl-pre {
+  margin: 12px 0 0; font: 400 11px/1.6 var(--ff-mono); color: var(--ink);
+  background: var(--gray-50); border-left: 3px solid var(--blue);
+  padding: 15px 17px; white-space: pre-wrap; word-break: break-word; max-height: 340px; overflow: auto;
+}
