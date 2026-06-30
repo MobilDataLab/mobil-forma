@@ -167,10 +167,11 @@ function laminaResumen(pptx: PptxGenJSType, inf: Informe) {
     let cx = barX;
     for (const it of items) {
       const w = barW * (it.venta / total);
+      const pctNum = Math.round(it.pct * 100); // pct viene como fracción 0..1
       s.addShape("rect", { x: cx, y: barY, w, h: barH, fill: { color: hex(it.color) } });
       // % dentro del segmento solo si hay ancho suficiente (~0.6in) para que se lea.
-      if (w >= 0.6 && it.pct >= 5) {
-        s.addText(`${it.pct}%`, { x: cx, y: barY, w, h: barH, fontFace: F_HEAD, fontSize: 12, bold: true, color: legibleSobre(it.color), align: "center", valign: "middle" });
+      if (w >= 0.6 && pctNum >= 5) {
+        s.addText(`${pctNum}%`, { x: cx, y: barY, w, h: barH, fontFace: F_HEAD, fontSize: 12, bold: true, color: legibleSobre(it.color), align: "center", valign: "middle" });
       }
       cx += w;
     }
@@ -182,7 +183,7 @@ function laminaResumen(pptx: PptxGenJSType, inf: Informe) {
       s.addText(
         [
           { text: `${it.funcion}  `, options: { color: C.ink, bold: false } },
-          { text: `${fmt(it.venta)} m² · ${it.pct}%`, options: { color: C.gris400 } },
+          { text: `${fmt(it.venta)} m² · ${Math.round(it.pct * 100)}%`, options: { color: C.gris400 } },
         ],
         { x: lx + 0.28, y: ly, w: 3.6, h: 0.28, fontFace: F_BODY, fontSize: 11, valign: "middle" }
       );

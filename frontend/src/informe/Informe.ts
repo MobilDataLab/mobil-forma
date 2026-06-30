@@ -107,10 +107,11 @@ export function redactarDescripcion(inf: Informe): string {
   );
 
   // Programa: principales funciones por venta (las que más superan en m²).
+  // OJO: `pct` viene como fracción 0..1 del motor → ×100 para mostrar el porcentaje.
   const items = cabida.venta?.items ?? [];
   if (items.length) {
     const top = [...items].sort((a, b) => b.venta - a.venta).slice(0, 3)
-      .map((i) => `${i.funcion.toLowerCase()} (${i.pct}%)`);
+      .map((i) => `${i.funcion.toLowerCase()} (${Math.round(i.pct * 100)}%)`);
     partes.push(`El programa se compone principalmente de ${top.join(", ")}.`);
   }
 
