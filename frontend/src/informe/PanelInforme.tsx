@@ -141,7 +141,7 @@ export default function PanelInforme({ resumen, venta, matriz, edificios, normas
 
       {/* Descargar */}
       <div className="inf-acciones">
-        <button className="btn-export inf-descargar" onClick={descargar} disabled={!hayCabida || generando}>
+        <button className="btn-export inf-descargar" onClick={descargar} disabled={!hayCabida || generando || !nombre.trim()}>
           {generando ? <IconoArchivo /> : <IconoDescarga />}
           {generando ? "Generando…" : "Descargar informe (PPTX)"}
         </button>
