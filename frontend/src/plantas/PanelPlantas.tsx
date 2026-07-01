@@ -149,9 +149,9 @@ export default function PanelPlantas() {
       <div className="pl-bloque pl-camino-b">
         <span className="rnd-cap-tit">Camino B — redibujar con un LLM (estilo)</span>
         <p className="pl-hint">
-          Pega <b>2 imágenes</b> (A = vector de líneas / forma · B = PNG coloreado / función + m²) + este
-          prompt en un LLM con visión (ChatGPT, Gemini, Claude) y obtienes la planta diagramática en la
-          paleta Mobil. No garantiza geometría exacta; es el atajo de estilo.
+          Pega <b>el PNG</b> de la planta de Forma + este prompt en un LLM con visión (ChatGPT, Gemini,
+          Claude) y obtienes la planta diagramática flat en la paleta Mobil, con función + m² por unidad.
+          El LLM lee la forma, el color y los m² de la misma imagen; el estilo lo define el contrato JSON.
         </p>
         <div className="pl-copy-row">
           <button className="btn-export" onClick={() => copiar("prompt", PROMPT_PLANTA)}>
