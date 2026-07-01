@@ -1105,7 +1105,7 @@ input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: -2px; b
 .pl-leg-item { display: inline-flex; align-items: center; gap: 8px; font: 400 12px var(--bd); color: var(--ink); }
 .pl-sw { width: 14px; height: 14px; border: 1px solid var(--gray-200); }
 
-.pl-camino-b { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--gray-200); }
+.pl-camino-b { margin-top: 18px; }
 .pl-copy-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
 .pl-pre {
   margin: 12px 0 0; font: 400 11px/1.6 var(--ff-mono); color: var(--ink);
