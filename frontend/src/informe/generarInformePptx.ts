@@ -12,10 +12,11 @@ import { redactarDescripcion } from "./Informe";
 
 // ── Tokens v3 (HEX sin "#", como espera pptxgenjs) ──
 const C = {
-  azul: "006BFF",
-  azulTexto: "0256CA",
-  azulProfundo: "011D41",
-  amarillo: "FFF81D",
+  azul: "1F3864",         // navy institucional Mobil — headers de tabla, títulos acento, kickers
+  azulMedio: "2E74B5",    // azul medio — acentos secundarios / hexágono sobre oscuro
+  azulTexto: "2E74B5",    // kicker
+  azulProfundo: "14243F", // fondo oscuro (motivo portada / cierre)
+  amarillo: "FFF81D",     // ACENTO DE MARCA MOBIL — se conserva
   ink: "1A1A1A",
   gris700: "555555",
   gris400: "A3A3A3",
@@ -25,13 +26,14 @@ const C = {
   error: "C8412C",
   blanco: "FFFFFF",
 };
-// Tipografía: condensada para títulos/labels, Roboto para cuerpo.
-// Se usa "Arial Narrow" (condensada estándar de Windows, presente en casi todo PC) en
-// lugar de "Swis721 Cn BT": esa fuente Mobil no está instalada en la mayoría de equipos,
-// así que PowerPoint caía a Calibri y el informe se veía genérico. Arial Narrow mantiene
-// el aire condensado de forma consistente en cualquier PC.
-const F_HEAD = "Arial Narrow";
-const F_BODY = "Roboto";
+// Tipografía: TODO el informe en una sola familia Mobil (Swis721 Cn BT), tanto títulos
+// como cuerpo. Antes el cuerpo iba en Roboto y se veía otra tipografía distinta al título;
+// se unifica para que el informe tenga una identidad tipográfica coherente.
+// PowerPoint usa la fuente si está instalada en el PC que abre el archivo (los equipos de
+// Mobil la tienen); en un PC sin ella cae a una condensada de sistema.
+const FUENTE = "Swis721 Cn BT";
+const F_HEAD = FUENTE;
+const F_BODY = FUENTE;
 
 // Lámina 16:9 en pulgadas (13.333 × 7.5). Helpers de proporción contra ese lienzo.
 const W = 13.333;
@@ -43,9 +45,39 @@ const fmt = (n: number, dec = 0) =>
 
 type Slide = ReturnType<PptxGenJSType["addSlide"]>;
 
-// Barra de pie de lámina (4px ≈ 0.05in). Azul por defecto, amarilla en normativa.
-function barraPie(slide: Slide, color = C.azul) {
+// Barra de pie de lámina (4px ≈ 0.05in). Franja de marca amarilla en todas las láminas.
+function barraPie(slide: Slide, color = C.amarillo) {
   slide.addShape("rect", { x: 0, y: H - 0.06, w: W, h: 0.06, fill: { color } });
+}
+
+// Logotipo MOBIL (hexágono con radios) — mismas 12 líneas del SVG de MobilMark.tsx.
+// Se rasteriza a un dataURL PNG (fondo transparente) para incrustarlo con addImage,
+// idéntico al logo del header de la app. `hex` es el color de las líneas (sin '#').
+function logoMobilPng(hex: string): string {
+  const S = 480; // lienzo cuadrado
+  const canvas = document.createElement("canvas");
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  // El viewBox original es 0..960 x 0..840; se escala a SxS conservando proporción.
+  const sx = S / 960, sy = S / 840;
+  const P: [number, number][][] = [
+    [[30, 419.22], [261.3, 30]], [[261.3, 30], [714, 30]], [[714, 30], [930, 419.22]],
+    [[930, 419.22], [716.7, 810]], [[716.7, 810], [261.3, 808.44]], [[261.3, 808.44], [30, 419.22]],
+    [[480, 419.22], [30, 419.22]], [[480, 419.22], [261.3, 30]], [[480, 419.22], [714, 30]],
+    [[480, 419.22], [930, 419.22]], [[480, 419.22], [716.7, 810]], [[480, 419.22], [261.3, 808.44]],
+  ];
+  ctx.strokeStyle = "#" + hex;
+  ctx.lineWidth = 34 * sx;
+  ctx.lineCap = "square";
+  ctx.lineJoin = "miter";
+  for (const [[x1, y1], [x2, y2]] of P) {
+    ctx.beginPath();
+    ctx.moveTo(x1 * sx, y1 * sy);
+    ctx.lineTo(x2 * sx, y2 * sy);
+    ctx.stroke();
+  }
+  return canvas.toDataURL("image/png");
 }
 
 // Texto vertical "MOBIL ARQUITECTOS" en el margen izquierdo de láminas de contenido.
@@ -98,11 +130,11 @@ function laminaPortada(pptx: PptxGenJSType, inf: Informe) {
   if (tieneHero) {
     s.addImage({ data: inf.imagenes.portada!, x: 7.0, y: 0, w: W - 7.0, h: H, sizing: { type: "cover", w: W - 7.0, h: H } });
   } else {
-    // Sin imagen → motivo hexagonal Mobil en el lado derecho.
-    s.addShape("hexagon", { x: 8.5, y: 1.9, w: 3.8, h: 3.3, fill: { color: C.blanco }, line: { color: C.gris200, width: 2 }, rotate: 90 });
-    s.addShape("hexagon", { x: 9.9, y: 3.0, w: 1.0, h: 0.87, fill: { color: C.blanco }, line: { color: C.azul, width: 2 }, rotate: 90 });
+    // Sin imagen → logotipo Mobil (navy) en el lado derecho.
+    const logo = logoMobilPng(C.azul);
+    if (logo) s.addImage({ data: logo, x: 9.15, y: 2.3, w: 2.5, h: 2.5 });
   }
-  barraPie(s, C.azul);
+  barraPie(s);
 }
 
 // ── Lámina 2 · Descripción del proyecto ──
@@ -116,9 +148,9 @@ function laminaDescripcion(pptx: PptxGenJSType, inf: Informe) {
     x: MARGEN, y: 1.7, w: 6.6, h: 2.6, fontFace: F_BODY, fontSize: 14, color: C.ink, lineSpacingMultiple: 1.25, valign: "top",
   });
 
-  // Ficha de datos (label + valor).
+  // Ficha de datos (label + valor). Ubicación/Clima se omiten si vienen vacíos ("—").
   const r = inf.cabida.resumen;
-  const ficha: [string, string][] = [
+  const fichaAll: [string, string][] = [
     ["Ubicación", inf.proyecto.ubicacion],
     ["Clima", inf.proyecto.clima],
     ["Construido", `${fmt(r.construido)} m²`],
@@ -126,6 +158,7 @@ function laminaDescripcion(pptx: PptxGenJSType, inf: Informe) {
     ["Eficiencia", `${Math.round(r.eficiencia * 100)} %`],
     ["Elementos", fmt(r.elementos)],
   ];
+  const ficha = fichaAll.filter(([, v]) => v && v.trim() && v.trim() !== "—");
   ficha.forEach(([k, v], i) => {
     const fy = 4.55 + i * 0.5;
     s.addText(k.toUpperCase(), { x: MARGEN, y: fy, w: 2.2, h: 0.4, fontFace: F_HEAD, fontSize: 10, color: C.gris400, charSpacing: 1, bold: true, valign: "middle" });
@@ -138,7 +171,7 @@ function laminaDescripcion(pptx: PptxGenJSType, inf: Informe) {
     s.addShape("rect", { x: 7.5, y: 1.7, w: 5.2, h: 3.6, fill: { color: C.gris50 }, line: { color: C.gris200, width: 1 } });
     s.addText("Emplazamiento (adjunta una imagen)", { x: 7.5, y: 3.3, w: 5.2, h: 0.4, fontFace: F_BODY, fontSize: 11, color: C.gris400, align: "center" });
   }
-  barraPie(s, C.azul);
+  barraPie(s);
 }
 
 // ── Lámina 3 · Cabida resumen (KPIs + barra de venta por función) ──
@@ -195,7 +228,7 @@ function laminaResumen(pptx: PptxGenJSType, inf: Informe) {
       );
     });
   }
-  barraPie(s, C.azul);
+  barraPie(s);
 }
 
 // ── Lámina 4 · Cabida por piso (barras horizontales apiladas, línea de terreno) ──
@@ -213,7 +246,8 @@ function laminaPorPiso(pptx: PptxGenJSType, inf: Informe) {
   const maxTotal = Math.max(1, ...filas.map(totalFila));
 
   const x0 = MARGEN + 1.2;            // espacio para etiqueta de piso
-  const wTot = W - x0 - MARGEN;
+  const labelW = 1.35;                // espacio reservado para la etiqueta de total al final
+  const wTot = W - x0 - MARGEN - labelW;
   const y0 = 1.8;
   const rowH = Math.min(0.32, (H - y0 - 1.0) / Math.max(filas.length, 1));
   let yLinea: number | null = null;
@@ -253,7 +287,7 @@ function laminaPorPiso(pptx: PptxGenJSType, inf: Informe) {
     s.addShape("rect", { x: lx, y: ly + 0.03, w: 0.16, h: 0.16, fill: { color: hex(m.colores[fn] || C.gris200) } });
     s.addText(fn, { x: lx + 0.24, y: ly, w: 2.7, h: 0.26, fontFace: F_BODY, fontSize: 9, color: C.ink, valign: "middle" });
   });
-  barraPie(s, C.azul);
+  barraPie(s);
 }
 
 // ── Lámina 5 · Cabida por edificio (tabla + fila total) ──
@@ -291,7 +325,7 @@ function laminaPorEdificio(pptx: PptxGenJSType, inf: Informe) {
     x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: [4.6, 1.7, 2.3, 2.3, 1.9],
     border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.45,
   });
-  barraPie(s, C.azul);
+  barraPie(s);
 }
 
 // ── Lámina 6 · Normativa urbanística (tabla de parámetros) ──
@@ -306,7 +340,7 @@ function laminaNormativa(pptx: PptxGenJSType, inf: Informe) {
   // Mantener la tabla dentro de la lámina 16:9: limitar columnas (Parámetro +
   // hasta 3 columnas de valores) y filas (las que caben holgadas). Si se recorta,
   // se avisa al pie. Esto evita el desborde y el archivo gigante.
-  const MAX_COLS = 3, MAX_FILAS = 16;
+  const MAX_COLS = 3, MAX_FILAS = 15;   // header + grupos + datos deben terminar antes de y≈6.4
   const cols = tabla.columnas.slice(0, MAX_COLS);
   // ¿La columna del semáforo (Propuesto) está entre las visibles?
   const colEstado = tabla.colEstado && cols.some((c) => c.id === tabla.colEstado) ? tabla.colEstado : undefined;
@@ -346,8 +380,8 @@ function laminaNormativa(pptx: PptxGenJSType, inf: Informe) {
   const firstW = 4.6;
   const restW = (tableW - firstW) / Math.max(colCount - 1, 1);
   s.addTable(rows, {
-    x: MARGEN, y: 1.75, w: tableW, colW: [firstW, ...Array(colCount - 1).fill(restW)],
-    border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.32, autoPage: false,
+    x: MARGEN, y: 1.7, w: tableW, colW: [firstW, ...Array(colCount - 1).fill(restW)],
+    border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.28, autoPage: false,
   });
   // Mini-leyenda del semáforo (solo si alguna fila lo tiene).
   if (hayEstado) {
@@ -362,7 +396,7 @@ function laminaNormativa(pptx: PptxGenJSType, inf: Informe) {
   if (recortado) {
     s.addText("Tabla resumida — ver el detalle completo en la app / Excel de normativa.", { x: MARGEN, y: H - 0.55, w: 10, h: 0.3, fontFace: F_BODY, fontSize: 9, color: C.gris400, italic: true });
   }
-  barraPie(s, C.amarillo);
+  barraPie(s);
 }
 
 // ── Lámina 7 · Estacionamientos (tabla de bloques + ratio) ──
@@ -372,7 +406,7 @@ function laminaEstacionamientos(pptx: PptxGenJSType, inf: Informe) {
   const s = pptx.addSlide();
   s.background = { color: C.blanco };
   margenVertical(s);
-  encabezado(s, "03 — Normativa", "", "Estacionamientos");
+  encabezado(s, "03 — Estacionamientos", "Estacionamientos", "");
 
   // Si aún no hay dotación de cajones, se ocultan esas columnas y el KPI de ratio
   // (antes mostraba "0 cajones · — m²/cajón" y parecía un bug).
@@ -418,7 +452,7 @@ function laminaEstacionamientos(pptx: PptxGenJSType, inf: Informe) {
     s.addText(`${fmt(totGfa)} m²`, { x: MARGEN, y: yBase + 0.1, w: 6.4, h: 0.5, fontFace: F_HEAD, fontSize: 26, color: C.ink, align: "center", valign: "middle" });
     s.addText("SUPERFICIE MODELADA · DOTACIÓN DE CAJONES PENDIENTE", { x: MARGEN, y: yBase + 0.62, w: 6.4, h: 0.3, fontFace: F_HEAD, fontSize: 10, color: C.gris700, charSpacing: 1, bold: true, align: "center" });
   }
-  barraPie(s, C.amarillo);
+  barraPie(s);
 }
 
 // ── Láminas 8–11 · Anexo gráfico (una imagen full-bleed por lámina) ──
@@ -436,10 +470,11 @@ function laminaAnexo(pptx: PptxGenJSType, data: string, rotulo: string) {
 function laminaCierre(pptx: PptxGenJSType) {
   const s = pptx.addSlide();
   s.background = { color: C.azulProfundo };
-  s.addShape("hexagon", { x: W / 2 - 0.5, y: 2.35, w: 1.0, h: 0.87, fill: { color: C.azulProfundo }, line: { color: C.amarillo, width: 2.5 }, rotate: 90 });
-  s.addText("MOBIL ARQUITECTOS", { x: 0, y: 3.7, w: W, h: 0.6, fontFace: F_HEAD, fontSize: 30, color: C.blanco, charSpacing: 3, align: "center" });
-  s.addText("Informe de cabida generado con mobil-forma", { x: 0, y: 4.4, w: W, h: 0.4, fontFace: F_BODY, fontSize: 13, color: C.gris400, align: "center" });
-  barraPie(s, C.amarillo);
+  const logo = logoMobilPng(C.amarillo);
+  if (logo) s.addImage({ data: logo, x: W / 2 - 0.9, y: 2.15, w: 1.8, h: 1.8 });
+  s.addText("MOBIL ARQUITECTOS", { x: 0, y: 4.05, w: W, h: 0.6, fontFace: F_HEAD, fontSize: 30, color: C.blanco, charSpacing: 3, align: "center" });
+  s.addText("Informe de cabida generado con mobil-forma", { x: 0, y: 4.75, w: W, h: 0.4, fontFace: F_BODY, fontSize: 13, color: C.gris400, align: "center" });
+  barraPie(s);
 }
 
 // Normaliza un color del motor (puede venir como "#RRGGBB") a HEX sin "#".
