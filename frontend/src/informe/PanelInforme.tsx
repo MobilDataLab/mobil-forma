@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Matriz } from "../GraficoCabida";
 import type { Venta } from "../GraficoVenta";
 import type { Edificios } from "../CabidaEdificios";
+import type { Superficies } from "../CabidaSuperficies";
 import type { Normas } from "../NormasUrbanisticas";
 import { construirInforme, type ImagenesInforme, type ResumenCabida } from "./Informe";
 import { generarInformePptx } from "./generarInformePptx";
@@ -13,6 +14,7 @@ type Props = {
   venta: Venta | null;
   matriz: Matriz | null;
   edificios: Edificios | null;
+  superficies: Superficies | null;
   normas: Normas | null;
 };
 
@@ -45,7 +47,7 @@ function leerDataURL(file: File): Promise<string> {
   });
 }
 
-export default function PanelInforme({ resumen, venta, matriz, edificios, normas }: Props) {
+export default function PanelInforme({ resumen, venta, matriz, edificios, superficies, normas }: Props) {
   const [nombre, setNombre] = useState("");
   const [imagenes, setImagenes] = useState<ImagenesInforme>({});
   const [generando, setGenerando] = useState(false);
@@ -76,7 +78,7 @@ export default function PanelInforme({ resumen, venta, matriz, edificios, normas
         nombre,
         ubicacion: ubic.etiqueta,
         clima: ubic.clima,
-        resumen, venta, matriz, edificios, normas,
+        resumen, venta, matriz, edificios, superficies, normas,
         imagenes,
       });
       await generarInformePptx(informe);

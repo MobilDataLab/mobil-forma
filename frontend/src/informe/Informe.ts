@@ -8,6 +8,7 @@
 import type { Matriz } from "../GraficoCabida";
 import type { Venta } from "../GraficoVenta";
 import type { Edificios } from "../CabidaEdificios";
+import type { Superficies } from "../CabidaSuperficies";
 import type { Normas } from "../NormasUrbanisticas";
 import { normasParaExcel } from "../NormasUrbanisticas";
 import { estacParaExcel } from "../Estacionamientos";
@@ -40,9 +41,10 @@ export type Informe = {
   };
   cabida: {
     resumen: ResumenCabida;
-    venta: Venta | null;       // venta por función (items + total)
-    matriz: Matriz | null;     // cabida por piso (con es_sub)
+    venta: Venta | null;         // venta por función (items + total)
+    matriz: Matriz | null;       // cabida por piso (con es_sub)
     edificios: Edificios | null;
+    superficies: Superficies | null; // matriz piso×función con construido/vendible
   };
   normativa: {
     tabla: NormasTabla | null; // de normasParaExcel(normas)
@@ -60,6 +62,7 @@ export type InsumosInforme = {
   venta: Venta | null;
   matriz: Matriz | null;
   edificios: Edificios | null;
+  superficies: Superficies | null;
   normas: Normas | null;
   imagenes: ImagenesInforme;
 };
@@ -83,6 +86,7 @@ export function construirInforme(ins: InsumosInforme): Informe {
       venta: ins.venta,
       matriz: ins.matriz,
       edificios: ins.edificios,
+      superficies: ins.superficies,
     },
     normativa: {
       tabla: ins.normas ? normasParaExcel(ins.normas) : null,
