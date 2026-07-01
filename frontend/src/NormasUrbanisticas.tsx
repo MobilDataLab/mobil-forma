@@ -76,7 +76,7 @@ const PARAMS: Param[] = [
   { id: "agrupamiento", label: "Agrupamiento" },
 
   // Coef. constructibilidad → su superficie (máx vs Forma)
-  { id: IN_COEF_CONST, label: "Coef. Constructibilidad" },
+  { id: IN_COEF_CONST, label: "Coef. Constructibilidad", formula: "incluye premios de fusión y conjunto armónico cuando corresponda" },
   {
     id: "sup_const", label: "Sup. Constructibilidad", unidad: "m²",
     formula: "Terreno neto × Coef. const.",
