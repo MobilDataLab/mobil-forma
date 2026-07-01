@@ -321,10 +321,64 @@ function laminaPorEdificio(pptx: PptxGenJSType, inf: Informe) {
     { text: `${Math.round(t.eficiencia * 100)} %`, options: { fontFace: F_HEAD, fontSize: 12, bold: true, fill: { color: C.gris50 }, align: "center" } },
   ]);
 
+  // colW debe sumar el ancho útil (W - 2·MARGEN ≈ 12.09"), o la tabla se sale del margen.
   s.addTable(rows, {
-    x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: [4.6, 1.7, 2.3, 2.3, 1.9],
+    x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: [4.29, 1.7, 2.1, 2.1, 1.9],
     border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.45,
   });
+  barraPie(s);
+}
+
+// ── Lámina · Superficies por piso (Total proyecto: piso × función + Construido/Vendible) ──
+function laminaSuperficies(pptx: PptxGenJSType, inf: Informe) {
+  const sup = inf.cabida.superficies;
+  const bloque = sup?.por_edificio?.["__total__"];
+  if (!sup || !bloque || !bloque.pisos.length) return;
+  const s = pptx.addSlide();
+  s.background = { color: C.blanco };
+  margenVertical(s);
+  encabezado(s, "02 — Cabida", "Superficies por", "piso");
+
+  // Limitar funciones si son muchas para que la tabla quepa (Parámetros + Construido + Vendible).
+  const MAX_FN = 5;
+  const funciones = sup.funciones.slice(0, MAX_FN);
+  const head = ["Piso", ...funciones, "Construido m²", "Vendible m²"];
+  const rows: PptxGenJSType.TableRow[] = [
+    head.map((h) => ({ text: h, options: { fontFace: F_HEAD, fontSize: 10, bold: true, color: C.blanco, fill: { color: C.azul }, charSpacing: 1, align: "center" as const } })),
+  ];
+  // Pisos: sobre tierra arriba, subterráneos abajo (es_sub al final del listado nativo).
+  for (const p of bloque.pisos) {
+    const celda = (v: number) => (v ? fmt(v) : "");
+    rows.push([
+      { text: String(p.etiqueta), options: { fontFace: F_BODY, fontSize: 10, color: p.es_sub ? C.gris400 : C.ink, align: "left" } },
+      ...funciones.map((fn) => ({ text: celda(Number(p.celdas[fn]) || 0), options: { fontFace: F_BODY, fontSize: 10, align: "center" as const } })),
+      { text: celda(p.construido), options: { fontFace: F_BODY, fontSize: 10, align: "center" } },
+      { text: celda(p.vendible), options: { fontFace: F_BODY, fontSize: 10, align: "center" } },
+    ]);
+  }
+  // Fila TOTAL resaltada.
+  const t = bloque.total;
+  rows.push([
+    { text: "TOTAL", options: { fontFace: F_HEAD, fontSize: 10, bold: true, color: C.ink, fill: { color: C.gris50 }, align: "left" } },
+    ...funciones.map((fn) => ({ text: (Number(t.celdas[fn]) || 0) ? fmt(Number(t.celdas[fn])) : "", options: { fontFace: F_HEAD, fontSize: 10, bold: true, fill: { color: C.gris50 }, align: "center" as const } })),
+    { text: fmt(t.construido), options: { fontFace: F_HEAD, fontSize: 10, bold: true, fill: { color: C.gris50 }, align: "center" } },
+    { text: fmt(t.vendible), options: { fontFace: F_HEAD, fontSize: 10, bold: true, fill: { color: C.gris50 }, align: "center" } },
+  ]);
+
+  // colW: Piso + N funciones + Construido + Vendible = ancho útil (12.09").
+  const tableW = W - MARGEN * 2;
+  const nFn = funciones.length;
+  const pisoW = 1.4, cvW = 1.9;               // Piso, y cada columna Construido/Vendible
+  const fnW = (tableW - pisoW - cvW * 2) / Math.max(nFn, 1);
+  s.addTable(rows, {
+    x: MARGEN, y: 1.75, w: tableW, colW: [pisoW, ...Array(nFn).fill(fnW), cvW, cvW],
+    border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.34, autoPage: false,
+  });
+
+  // Ratio Vendible/Construido al pie.
+  if (bloque.ratio) {
+    s.addText(`Vendible / Construido: ${Math.round(bloque.ratio * 100)}%`, { x: MARGEN, y: H - 0.62, w: 6, h: 0.3, fontFace: F_HEAD, fontSize: 11, bold: true, color: C.azulTexto });
+  }
   barraPie(s);
 }
 
@@ -430,7 +484,7 @@ function laminaEstacionamientos(pptx: PptxGenJSType, inf: Informe) {
     rows.push(fila);
   }
   s.addTable(rows, {
-    x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: conCajones ? [4.6, 3.2, 2.3, 2.0] : [6.0, 6.1],
+    x: MARGEN, y: 1.8, w: W - MARGEN * 2, colW: conCajones ? [4.59, 3.2, 2.3, 2.0] : [6.04, 6.05],
     border: { type: "solid", color: C.gris200, pt: 1 }, valign: "middle", rowH: 0.5,
   });
 
@@ -471,9 +525,9 @@ function laminaCierre(pptx: PptxGenJSType) {
   const s = pptx.addSlide();
   s.background = { color: C.azulProfundo };
   const logo = logoMobilPng(C.amarillo);
-  if (logo) s.addImage({ data: logo, x: W / 2 - 0.9, y: 2.15, w: 1.8, h: 1.8 });
-  s.addText("MOBIL ARQUITECTOS", { x: 0, y: 4.05, w: W, h: 0.6, fontFace: F_HEAD, fontSize: 30, color: C.blanco, charSpacing: 3, align: "center" });
-  s.addText("Informe de cabida generado con mobil-forma", { x: 0, y: 4.75, w: W, h: 0.4, fontFace: F_BODY, fontSize: 13, color: C.gris400, align: "center" });
+  if (logo) s.addImage({ data: logo, x: W / 2 - 0.425, y: 2.75, w: 0.85, h: 0.85 });
+  s.addText("MOBIL ARQUITECTOS", { x: 0, y: 3.85, w: W, h: 0.6, fontFace: F_HEAD, fontSize: 30, color: C.blanco, charSpacing: 3, align: "center" });
+  s.addText("Informe de cabida generado con mobil-forma", { x: 0, y: 4.45, w: W, h: 0.4, fontFace: F_BODY, fontSize: 13, color: C.gris400, align: "center" });
   barraPie(s);
 }
 
@@ -506,6 +560,7 @@ export async function generarInformePptx(inf: Informe): Promise<void> {
   laminaResumen(pptx, inf);
   laminaPorPiso(pptx, inf);
   laminaPorEdificio(pptx, inf);
+  laminaSuperficies(pptx, inf);
   laminaNormativa(pptx, inf);
   laminaEstacionamientos(pptx, inf);
 

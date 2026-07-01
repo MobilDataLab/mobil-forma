@@ -497,6 +497,7 @@ json.dumps({
                 venta={venta}
                 matriz={matriz}
                 edificios={edificios}
+                superficies={superficies}
                 normas={normas}
               />
             </section>
