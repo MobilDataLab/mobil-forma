@@ -80,6 +80,37 @@ function logoMobilPng(hex: string): string {
   return canvas.toDataURL("image/png");
 }
 
+// Recorta una imagen (dataURL) al aspect-ratio de un recuadro destino (wIn×hIn en
+// pulgadas), centrada — un "cover" real hecho en canvas para que NUNCA se deforme
+// (no dependemos del sizing de pptxgenjs). Devuelve un dataURL PNG ya con la proporción
+// exacta del recuadro; luego se incrusta con addImage sin `sizing`.
+function recortarCover(dataURL: string, wIn: number, hIn: number): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const arDest = wIn / hIn;              // proporción del recuadro
+      const arSrc = img.naturalWidth / img.naturalHeight;
+      let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+      if (arSrc > arDest) {                  // imagen más ancha → recorta a los lados
+        sw = Math.round(img.naturalHeight * arDest);
+        sx = Math.round((img.naturalWidth - sw) / 2);
+      } else {                               // imagen más alta → recorta arriba/abajo
+        sh = Math.round(img.naturalWidth / arDest);
+        sy = Math.round((img.naturalHeight - sh) / 2);
+      }
+      // Lienzo de salida al tamaño del recorte (px), conservando resolución.
+      const canvas = document.createElement("canvas");
+      canvas.width = sw; canvas.height = sh;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(dataURL); return; }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => resolve(dataURL);    // si falla, deja la original
+    img.src = dataURL;
+  });
+}
+
 // Texto vertical "MOBIL ARQUITECTOS" en el margen izquierdo de láminas de contenido.
 function margenVertical(slide: Slide) {
   slide.addText("MOBIL ARQUITECTOS", {
@@ -104,7 +135,7 @@ function encabezado(slide: Slide, kicker: string, titulo: string, acento: string
 }
 
 // ── Lámina 1 · Portada ──
-function laminaPortada(pptx: PptxGenJSType, inf: Informe) {
+async function laminaPortada(pptx: PptxGenJSType, inf: Informe) {
   const s = pptx.addSlide();
   s.background = { color: C.blanco };
   const tieneHero = !!inf.imagenes.portada;
@@ -128,7 +159,9 @@ function laminaPortada(pptx: PptxGenJSType, inf: Informe) {
   );
 
   if (tieneHero) {
-    s.addImage({ data: inf.imagenes.portada!, x: 7.0, y: 0, w: W - 7.0, h: H, sizing: { type: "cover", w: W - 7.0, h: H } });
+    const heroW = W - 7.0;
+    const hero = await recortarCover(inf.imagenes.portada!, heroW, H);
+    s.addImage({ data: hero, x: 7.0, y: 0, w: heroW, h: H });
   } else {
     // Sin imagen → logotipo Mobil (navy) en el lado derecho.
     const logo = logoMobilPng(C.azul);
@@ -138,7 +171,7 @@ function laminaPortada(pptx: PptxGenJSType, inf: Informe) {
 }
 
 // ── Lámina 2 · Descripción del proyecto ──
-function laminaDescripcion(pptx: PptxGenJSType, inf: Informe) {
+async function laminaDescripcion(pptx: PptxGenJSType, inf: Informe) {
   const s = pptx.addSlide();
   s.background = { color: C.blanco };
   margenVertical(s);
@@ -166,7 +199,8 @@ function laminaDescripcion(pptx: PptxGenJSType, inf: Informe) {
   });
 
   if (inf.imagenes.emplazamiento) {
-    s.addImage({ data: inf.imagenes.emplazamiento, x: 7.5, y: 1.7, w: 5.2, h: 3.6, sizing: { type: "cover", w: 5.2, h: 3.6 } });
+    const emp = await recortarCover(inf.imagenes.emplazamiento, 5.2, 3.6);
+    s.addImage({ data: emp, x: 7.5, y: 1.7, w: 5.2, h: 3.6 });
   } else {
     s.addShape("rect", { x: 7.5, y: 1.7, w: 5.2, h: 3.6, fill: { color: C.gris50 }, line: { color: C.gris200, width: 1 } });
     s.addText("Emplazamiento (adjunta una imagen)", { x: 7.5, y: 3.3, w: 5.2, h: 0.4, fontFace: F_BODY, fontSize: 11, color: C.gris400, align: "center" });
@@ -510,10 +544,11 @@ function laminaEstacionamientos(pptx: PptxGenJSType, inf: Informe) {
 }
 
 // ── Láminas 8–11 · Anexo gráfico (una imagen full-bleed por lámina) ──
-function laminaAnexo(pptx: PptxGenJSType, data: string, rotulo: string) {
+async function laminaAnexo(pptx: PptxGenJSType, data: string, rotulo: string) {
   const s = pptx.addSlide();
   s.background = { color: "E7ECF2" };
-  s.addImage({ data, x: 0, y: 0, w: W, h: H, sizing: { type: "cover", w: W, h: H } });
+  const img = await recortarCover(data, W, H);
+  s.addImage({ data: img, x: 0, y: 0, w: W, h: H });
   // Kicker azul arriba-izq.
   s.addText("04 — ANEXO GRÁFICO", { x: 0, y: 0.5, w: 3.3, h: 0.4, fontFace: F_HEAD, fontSize: 12, color: C.blanco, fill: { color: C.azul }, charSpacing: 2, bold: true, align: "center", valign: "middle" });
   // Rótulo en franja ink abajo-izq.
@@ -554,9 +589,10 @@ export async function generarInformePptx(inf: Informe): Promise<void> {
   pptx.defineLayout({ name: "MOBIL_16x9", width: W, height: H });
   pptx.layout = "MOBIL_16x9";
 
-  // Láminas de contenido (siempre).
-  laminaPortada(pptx, inf);
-  laminaDescripcion(pptx, inf);
+  // Láminas de contenido (siempre). Las que incrustan imágenes del usuario son async
+  // (recortan la imagen al recuadro antes de insertarla) → se esperan con await.
+  await laminaPortada(pptx, inf);
+  await laminaDescripcion(pptx, inf);
   laminaResumen(pptx, inf);
   laminaPorPiso(pptx, inf);
   laminaPorEdificio(pptx, inf);
@@ -572,7 +608,7 @@ export async function generarInformePptx(inf: Informe): Promise<void> {
     [inf.imagenes.peatonal, "Vista peatonal"],
   ];
   for (const [data, rotulo] of anexos) {
-    if (data) laminaAnexo(pptx, data, rotulo);
+    if (data) await laminaAnexo(pptx, data, rotulo);
   }
 
   laminaCierre(pptx);
