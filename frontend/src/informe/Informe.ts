@@ -101,10 +101,17 @@ export function redactarDescripcion(inf: Informe): string {
   const { proyecto, cabida } = inf;
   const partes: string[] = [];
 
-  partes.push(
-    `${proyecto.nombre} se emplaza en ${proyecto.ubicacion}` +
-    (proyecto.clima && proyecto.clima !== "—" ? `, en un contexto de clima ${proyecto.clima}.` : ".")
-  );
+  // Frase de emplazamiento solo si hay ubicación real (si no, se omite para no dejar "en —").
+  const hayUbic = !!proyecto.ubicacion && proyecto.ubicacion.trim() !== "" && proyecto.ubicacion.trim() !== "—";
+  const hayClima = !!proyecto.clima && proyecto.clima.trim() !== "" && proyecto.clima.trim() !== "—";
+  if (hayUbic) {
+    partes.push(
+      `${proyecto.nombre} se emplaza en ${proyecto.ubicacion}` +
+      (hayClima ? `, en un contexto de clima ${proyecto.clima}.` : ".")
+    );
+  } else if (hayClima) {
+    partes.push(`${proyecto.nombre}, en un contexto de clima ${proyecto.clima}.`);
+  }
 
   // Programa: principales funciones por venta (las que más superan en m²).
   // OJO: `pct` viene como fracción 0..1 del motor → ×100 para mostrar el porcentaje.
