@@ -3,9 +3,7 @@
 // El usuario pega la captura de planta de Forma (unidades coloreadas + m² + contexto)
 // junto a este prompt en un LLM con visión, y obtiene la planta diagramática flat en la
 // paleta Mobil. Una sola imagen: de ahí se leen contornos, color→función y los m². No se
-// sube nada desde la app. El contrato usa la paleta canónica del motor (no se inventan hex).
-
-import { PALETA_CANONICA } from "./paletaPlantas";
+// sube nada desde la app. Los colores del contrato son tonos suaves de la paleta del motor.
 
 export const PROMPT_PLANTA = [
   "Eres un dibujante de plantas arquitectónicas. Te entrego UNA imagen PNG: una captura de",
@@ -15,64 +13,76 @@ export const PROMPT_PLANTA = [
   "Redibújala como una PLANTA DIAGRAMÁTICA FLAT estilo Mobil siguiendo el contrato JSON de abajo:",
   "- La imagen es la fuente ÚNICA: lee de ahí los contornos de cada unidad, su color → función,",
   "  y el texto de m². NO reinterpretes la forma (respeta 1:1 ángulos, proporciones y subdivisiones).",
-  "- Recolorea cada unidad a la PALETA CANÓNICA del JSON (no uses los colores crudos; mapéalos).",
+  "- Rellena cada unidad ÚTIL con su tono SUAVE de la paleta; las unidades COMUNES van sin relleno",
+  "  (solo el contorno). Mapea el color del PNG a la función, no uses el color crudo.",
   "- Copia los m² EXACTOS que aparecen en el PNG, sin recalcular ni cambiar dígitos.",
   "- Elimina todo el contexto: árboles, sombras, grilla, terreno y estacionamientos de fondo.",
-  "- Relleno plano por función, borde blanco entre unidades, contorno exterior ink, esquinas rectas.",
-  "- Rotula cada unidad con NOMBRE DE FUNCIÓN (condensada mayúsculas, pequeña) + ÁREA m² (grande).",
-  "- Encabezado con piso · edificio · GFA total + barra azul, y leyenda de las funciones presentes.",
+  "- Bordes y contornos en NEGRO ink (#16181C) 2px; esquinas levemente redondeadas (~8px).",
+  "- En cada unidad muestra SOLO el área en m² (grande, centrada), SIN el nombre de la función.",
+  "- Sin encabezado ni leyenda: solo la planta con sus unidades.",
   "",
-  "Devuelve un PNG con fondo transparente: la planta flat en estilo Mobil, función + m² por unidad.",
+  "Devuelve un PNG con FONDO BLANCO: la planta flat en estilo Mobil, función + m² por unidad.",
 ].join("\n");
 
 // Contrato JSON con la paleta canónica del motor. Encabezado y m² como placeholders
 // (genérico: sirve para cualquier piso/edificio, no solo el ejemplo de referencia).
 export function contratoPlantaJSON(): string {
-  const paleta: Record<string, string> = {};
-  for (const [fn, hex] of Object.entries(PALETA_CANONICA)) paleta[fn] = "#" + hex;
-  // El motor no distingue "Núcleo"/"Circulación" como funciones aparte; se añaden alias
-  // de mapeo para que el LLM sepa a qué canónico llevar esos colores del PNG.
-  paleta["Ascensores / Núcleo"] = "#808080";
-  paleta["Circulación / Común"] = "#EDF0F3";
-
   const contrato = {
-    task: "Redibujar como planta diagramática flat estilo Mobil, a partir de una imagen PNG",
+    task: "Redibujar planta diagramática a partir de un PNG",
     input: {
-      imagen_png: "Captura de planta de Forma (unidades coloreadas + m² + contexto de sitio con árboles y sombras).",
+      imagen_png: "Captura de planta de Autodesk Forma (unidades coloreadas + m² + contexto de sitio con árboles y sombras).",
       rol: "Fuente única. Leer de aquí: contornos de cada unidad, su color→función, y el texto de m². NO reinterpretar la forma.",
     },
-    paleta_canonica: paleta,
+    // Relleno por función. Las funciones ÚTILES (residencial/comercio/oficinas) y los
+    // ascensores usan un tono ~2 niveles más claro que el canónico del motor. Las
+    // funciones COMUNES van SIN relleno (solo el contorno de la unidad).
+    paleta_relleno: {
+      "Residencial Util": "#7CA7D3",     // canónico #2E74B5, aclarado
+      "Comercial Util": "#F8AC7C",       // canónico #F4802A, aclarado
+      "Oficinas Util": "#BCE196",        // canónico #92D050, aclarado
+      "Ascensores": "#C5AFD5",           // canónico #9E7BB5, aclarado
+      "Residencial Comun": "solo contorno (sin relleno)",
+      "Oficinas Comun": "solo contorno (sin relleno)",
+      "Comercial Comun": "solo contorno (sin relleno)",
+      "Circulación / Común": "solo contorno (sin relleno)",
+    },
     mapeo_color_input: {
-      azul: "Residencial Util → #2E74B5",
-      purpura_lila: "Ascensores / Núcleo → #808080",
+      azul: "Residencial Util → #7CA7D3 (tono suave)",
+      naranja: "Comercial Util → #F8AC7C (tono suave)",
+      verde: "Oficinas Util → #BCE196 (tono suave)",
+      purpura_lila: "Ascensores → #C5AFD5 (tono suave)",
+      azul_muy_oscuro_o_franja: "Común / circulación → SOLO CONTORNO (sin relleno)",
       gris_azulado_bloques: "Estacionamientos / núcleo → OMITIR (no es programa)",
       verde_circulos: "árboles → OMITIR",
       gris_claro_grilla_sombras: "contexto de sitio → OMITIR",
     },
     estilo_salida: {
       nombre: "Diagrama Mobil · flat",
-      fondo: "#FFFFFF transparente",
-      relleno: "color canónico plano 100% por función (sin gradiente, sin sombra, sin textura)",
-      borde_entre_unidades: "blanco 3px",
-      contorno_exterior: "ink #16181C 2px",
-      esquinas: "radius 0",
+      fondo: "#FFFFFF (blanco, no transparente)",
+      relleno: "color plano por función según paleta_relleno (sin gradiente, sin sombra, sin textura); las funciones comunes quedan sin relleno, solo contorno",
+      borde_entre_unidades: "negro ink #16181C 2px",
+      contorno_exterior: "negro ink #16181C 2px",
+      esquinas: "radius ~8px (levemente redondeadas)",
+      etiqueta_por_unidad: "SOLO el área en m² (sin nombre de función), tomada TAL CUAL del PNG",
       tipografia: {
         familia: "condensada, mayúsculas (Archivo Narrow / Swis721 Cn)",
-        etiqueta_funcion: "700, pequeña, letter-spacing .14em",
-        etiqueta_area: "700, grande, tomada TAL CUAL del PNG",
+        etiqueta_area: "700, grande, centrada en la unidad",
       },
-      encabezado: "PISO {N} · EDIFICIO {XXX} · GFA {TOTAL} M², con barra 4px #006BFF",
-      leyenda: "chips de color + nombre de función presentes",
-      omitir: ["árboles", "sombras", "grilla", "terreno", "estacionamiento contexto"],
+      sin_encabezado: true,
+      sin_leyenda: true,
+      sin_nombre_funcion: true,
+      omitir: ["árboles", "sombras", "grilla", "terreno", "estacionamiento contexto", "encabezado", "leyenda", "nombre de función en las unidades"],
     },
     reglas: [
       "Respetar 1:1 la geometría del PNG: mismos ángulos, proporciones y subdivisiones de cada unidad.",
-      "Recolorear cada unidad según su color en el PNG mapeado a la paleta canónica.",
+      "Rellenar cada unidad ÚTIL con su tono suave de paleta_relleno; las unidades COMUNES van sin relleno (solo contorno).",
+      "En cada unidad mostrar SOLO el área en m² (sin el nombre de la función). El color ya indica la función.",
+      "Todos los bordes y contornos en negro ink #16181C 2px; esquinas levemente redondeadas (~8px).",
       "Copiar los m² EXACTOS que aparecen en el PNG. No recalcular, no cambiar dígitos.",
       "No inventar espacios, no fusionar ni dividir unidades, no rotar la planta.",
       "Eliminar todo el contexto (árboles, sombras, calles, estacionamientos de fondo).",
     ],
-    salida_esperada: "PNG fondo transparente, planta flat en paleta Mobil, FUNCIÓN + m² por unidad, encabezado + leyenda.",
+    salida_esperada: "PNG con fondo blanco, planta flat estilo Mobil con tonos suaves, comunes solo contorno, bordes negros y esquinas levemente redondeadas. SOLO el m² por unidad (sin nombre de función). Sin encabezado ni leyenda.",
   };
   return JSON.stringify(contrato, null, 2);
 }
